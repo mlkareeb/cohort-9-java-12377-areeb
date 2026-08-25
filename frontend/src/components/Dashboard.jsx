@@ -156,13 +156,21 @@ function Dashboard({ username, onLogout }) {
     const handlePasswordReset = async (e) => {
         e.preventDefault();
         try {
-            await changePasswordApi({ currentPassword, newPassword });
+            // Mapped currentPassword state to oldPassword payload to match ChangePasswordRequest DTO
+            await changePasswordApi({ oldPassword: currentPassword, newPassword });
             setShowChangePasswordModal(false);
             setCurrentPassword('');
             setNewPassword('');
             triggerToast('Password updated successfully.');
         } catch (error) {
-            triggerToast(`Error: ${error.message}`);
+            const backendMsg = error.response?.data?.message || error.response?.data;
+            const errorMsg = typeof backendMsg === 'string' ? backendMsg : (error.message || 'Failed to update password.');
+
+            if (errorMsg.toLowerCase().includes('internal server') || errorMsg.toLowerCase().includes('500') || errorMsg.toLowerCase().includes('bad credentials')) {
+                triggerToast('Error: Incorrect current password.');
+            } else {
+                triggerToast(`Error: ${errorMsg}`);
+            }
         }
     };
 

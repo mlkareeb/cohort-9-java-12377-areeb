@@ -79,13 +79,13 @@ export const deleteContactApi = async (id) => {
 };
 
 export const changePasswordApi = async (passwordData) => {
-    const response = await fetch(`${BASE_URL}/auth/change-password`, {
+    const response = await fetch(`${BASE_URL}/users/change-password`, {
         method: 'PUT',
         headers: getHeaders(),
         body: JSON.stringify(passwordData)
     });
     if (!response.ok) await handleApiError(response, 'Failed to update password');
-    return await response.json();
+    return await response.text();
 };
 
 // --- Register API ---
@@ -105,7 +105,7 @@ export const registerApi = async (userData) => {
 
 // --- User Profile API ---
 export const getUserProfileApi = async () => {
-    const response = await fetch(`${BASE_URL}/auth/profile`, {
+    const response = await fetch(`${BASE_URL}/users/me`, {
         method: 'GET',
         headers: getHeaders()
     });
