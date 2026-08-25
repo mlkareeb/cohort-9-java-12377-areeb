@@ -6,14 +6,21 @@ import Dashboard from './components/Dashboard';
 function App() {
     const [isLoggedIn, setIsLoggedIn] = useState(false);
     const [isLogin, setIsLogin] = useState(true);
+    const [username, setUsername] = useState('');
+
+    const handleLoginSuccess = (loggedUser) => {
+        setUsername(loggedUser || 'User');
+        setIsLoggedIn(true);
+    };
 
     const handleLogout = () => {
         localStorage.removeItem('token');
+        setUsername('');
         setIsLoggedIn(false);
     };
 
     if (isLoggedIn) {
-        return <Dashboard onLogout={handleLogout} />;
+        return <Dashboard username={username} onLogout={handleLogout} />;
     }
 
     return (
@@ -58,7 +65,7 @@ function App() {
             </div>
 
             {isLogin ? (
-                <Login onLoginSuccess={() => setIsLoggedIn(true)} />
+                <Login onLoginSuccess={handleLoginSuccess} />
             ) : (
                 <Register onRegisterSuccess={() => setIsLogin(true)} />
             )}

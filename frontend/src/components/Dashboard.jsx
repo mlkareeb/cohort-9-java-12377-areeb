@@ -10,14 +10,14 @@ import {
     changePasswordApi
 } from '../services/api';
 
-function Dashboard({ onLogout }) {
+function Dashboard({ username, onLogout }) {
     const [activeTab, setActiveTab] = useState('contacts');
     const [viewMode, setViewMode] = useState('card');
 
     const [contacts, setContacts] = useState([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
-    const contactsPerPage = 4;
+    const contactsPerPage = 6;
 
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [showUpdateModal, setShowUpdateModal] = useState(false);
@@ -38,26 +38,37 @@ function Dashboard({ onLogout }) {
 
     const triggerToast = (msg) => {
         setToastMessage(msg);
-        setTimeout(() => setToastMessage(null), 3000);
+        setTimeout(() => setToastMessage(null), 4000);
     };
-
-    // --- Load Contacts from Backend API on Mount ---
-    useEffect(() => {
-        loadContacts();
-    }, []);
 
     const loadContacts = async () => {
         try {
             const data = await fetchContactsApi();
-            setContacts(data);
+            console.log("Fetched contacts response:", data);
+
+            let listToSet = [];
+            if (Array.isArray(data)) {
+                listToSet = data;
+            } else if (data && typeof data === 'object') {
+                listToSet = data.content || data.contacts || data.data || Object.values(data).find(Array.isArray) || [];
+            }
+
+            setContacts(Array.isArray(listToSet) ? listToSet : []);
         } catch (error) {
             triggerToast('Failed to load contacts from database.');
+            setContacts([]);
         }
     };
 
-    const filteredContacts = contacts.filter(c =>
-        c.firstName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        c.lastName.toLowerCase().includes(searchQuery.toLowerCase())
+    useEffect(() => {
+        loadContacts();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    const safeContacts = Array.isArray(contacts) ? contacts : [];
+    const filteredContacts = safeContacts.filter(c =>
+        (c.firstName?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
+        (c.lastName?.toLowerCase() || '').includes(searchQuery.toLowerCase())
     );
 
     const totalPages = Math.ceil(filteredContacts.length / contactsPerPage) || 1;
@@ -79,16 +90,16 @@ function Dashboard({ onLogout }) {
                 firstName,
                 lastName,
                 title,
-                emails: [{ type: 'Work', address: email }],
-                phones: [{ type: 'Mobile', number: phone }]
+                emails: { Work: email },
+                phoneNumbers: { Mobile: phone }
             };
             await createContactApi(newEntry);
-            await loadContacts(); // Refresh list from server
+            await loadContacts();
             setShowCreateModal(false);
             setFirstName(''); setLastName(''); setTitle(''); setEmail(''); setPhone('');
             triggerToast('Contact added successfully.');
         } catch (error) {
-            triggerToast('Error saving contact.');
+            triggerToast(`Error: ${error.message}`);
         }
     };
 
@@ -97,8 +108,17 @@ function Dashboard({ onLogout }) {
         setFirstName(contact.firstName);
         setLastName(contact.lastName);
         setTitle(contact.title);
-        setEmail(contact.emails[0]?.address || '');
-        setPhone(contact.phones[0]?.number || '');
+
+        const emailVal = typeof contact.emails === 'object' && contact.emails !== null && !Array.isArray(contact.emails)
+            ? (contact.emails['Work'] || Object.values(contact.emails)[0] || '')
+            : (contact.emails?.[0]?.address || '');
+
+        const phoneVal = typeof contact.phoneNumbers === 'object' && contact.phoneNumbers !== null && !Array.isArray(contact.phoneNumbers)
+            ? (contact.phoneNumbers['Mobile'] || Object.values(contact.phoneNumbers)[0] || '')
+            : (contact.phoneNumbers?.[0]?.number || '');
+
+        setEmail(emailVal);
+        setPhone(phoneVal);
         setShowUpdateModal(true);
     };
 
@@ -109,22 +129,22 @@ function Dashboard({ onLogout }) {
                 firstName,
                 lastName,
                 title,
-                emails: [{ type: 'Work', address: email }],
-                phones: [{ type: 'Mobile', number: phone }]
+                emails: { Work: email },
+                phoneNumbers: { Mobile: phone }
             };
             await updateContactApi(selectedContact.id, updatedData);
-            await loadContacts(); // Refresh list from server
+            await loadContacts();
             setShowUpdateModal(false);
             triggerToast('Contact updated successfully.');
         } catch (error) {
-            triggerToast('Error updating contact.');
+            triggerToast(`Error: ${error.message}`);
         }
     };
 
     const handleDeleteConfirm = async () => {
         try {
             await deleteContactApi(selectedContact.id);
-            setContacts(contacts.filter(c => c.id !== selectedContact.id));
+            setContacts(safeContacts.filter(c => c.id !== selectedContact.id));
             setShowDeleteModal(false);
             setSelectedContact(null);
             triggerToast('Contact removed.');
@@ -142,27 +162,27 @@ function Dashboard({ onLogout }) {
             setNewPassword('');
             triggerToast('Password updated successfully.');
         } catch (error) {
-            triggerToast('Failed to update password.');
+            triggerToast(`Error: ${error.message}`);
         }
     };
 
     const handleExportContacts = () => {
-        exportContactsToFile(contacts, triggerToast);
+        exportContactsToFile(safeContacts, triggerToast);
     };
 
     const handleImportContacts = async (e) => {
-        importContactsFromFile(e, setContacts, triggerToast);
-        // Optional: If you want imported contacts saved to database instantly,
-        // you can loop through them and post them via createContactApi here.
+        importContactsFromFile(e, safeContacts, setContacts, loadContacts, triggerToast);
     };
+
+    const displayName = username || 'User';
 
     return (
         <div style={{ minHeight: '100vh', background: '#F8FAFC', color: '#1E293B', fontFamily: 'Inter, system-ui, sans-serif', display: 'flex', boxSizing: 'border-box' }}>
 
             {/* Toast Notification */}
             {toastMessage && (
-                <div style={{ position: 'fixed', top: '24px', right: '24px', zIndex: 100, background: '#FFFFFF', border: '1px solid #E2E8F0', padding: '12px 20px', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', fontSize: '14px', fontWeight: '500', color: '#0F172A' }}>
-                    ✓ {toastMessage}
+                <div style={{ position: 'fixed', top: '24px', right: '24px', zIndex: 2000, background: '#FFFFFF', border: '1px solid #E2E8F0', padding: '12px 20px', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', fontSize: '14px', fontWeight: '500', color: '#0F172A', maxWidth: '400px', wordBreak: 'break-word' }}>
+                    {toastMessage}
                 </div>
             )}
 
@@ -193,10 +213,10 @@ function Dashboard({ onLogout }) {
                 <div style={{ background: '#F8FAFC', padding: '12px 16px', borderRadius: '10px', border: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <div style={{ width: '32px', height: '32px', background: '#2563EB', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '700', fontSize: '13px', color: '#FFFFFF' }}>
-                            AK
+                            {displayName.substring(0, 2).toUpperCase()}
                         </div>
                         <div>
-                            <p style={{ margin: '0', fontSize: '13px', fontWeight: '600', color: '#0F172A' }}>Areeb Khan</p>
+                            <p style={{ margin: '0', fontSize: '13px', fontWeight: '600', color: '#0F172A' }}>{displayName}</p>
                             <p style={{ margin: '0', fontSize: '11px', color: '#64748B' }}>Online</p>
                         </div>
                     </div>
@@ -240,9 +260,7 @@ function Dashboard({ onLogout }) {
                                     <p style={{ margin: '0', color: '#64748B', fontSize: '13px' }}>Manage your professional and personal network.</p>
                                 </div>
 
-                                {/* Controls Toolbar (View Toggle + Download/Upload Buttons) */}
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-
                                     <button
                                         onClick={handleExportContacts}
                                         style={{ padding: '6px 12px', background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: '6px', color: '#0F172A', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}
@@ -265,7 +283,6 @@ function Dashboard({ onLogout }) {
                                         Upload
                                     </button>
 
-                                    {/* View Mode Toggle Switch */}
                                     <div style={{ display: 'flex', background: '#E2E8F0', padding: '3px', borderRadius: '8px', marginLeft: '8px' }}>
                                         <button
                                             onClick={() => setViewMode('card')}
@@ -307,18 +324,22 @@ function Dashboard({ onLogout }) {
                                         </tr>
                                         </thead>
                                         <tbody>
-                                        {currentContacts.map(c => (
-                                            <tr key={c.id} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                                                <td style={{ padding: '14px 20px', fontWeight: '600', color: '#0F172A' }}>{c.firstName} {c.lastName}</td>
-                                                <td style={{ padding: '14px 20px', color: '#64748B' }}>{c.title}</td>
-                                                <td style={{ padding: '14px 20px', color: '#64748B' }}>{c.emails[0]?.address}</td>
-                                                <td style={{ padding: '14px 20px', color: '#64748B' }}>{c.phones[0]?.number}</td>
-                                                <td style={{ padding: '14px 20px', textAlign: 'right' }}>
-                                                    <button onClick={() => openUpdateModal(c)} style={{ background: 'transparent', border: 'none', color: '#2563EB', cursor: 'pointer', marginRight: '12px', fontWeight: '600' }}>Edit</button>
-                                                    <button onClick={() => { setSelectedContact(c); setShowDeleteModal(true); }} style={{ background: 'transparent', border: 'none', color: '#DC2626', cursor: 'pointer', fontWeight: '600' }}>Delete</button>
-                                                </td>
-                                            </tr>
-                                        ))}
+                                        {currentContacts.map(c => {
+                                            const emailText = typeof c.emails === 'object' && c.emails !== null && !Array.isArray(c.emails) ? (c.emails['Work'] || Object.values(c.emails)[0]) : c.emails?.[0]?.address;
+                                            const phoneText = typeof c.phoneNumbers === 'object' && c.phoneNumbers !== null && !Array.isArray(c.phoneNumbers) ? (c.phoneNumbers['Mobile'] || Object.values(c.phoneNumbers)[0]) : c.phoneNumbers?.[0]?.number;
+                                            return (
+                                                <tr key={c.id} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                                                    <td style={{ padding: '14px 20px', fontWeight: '600', color: '#0F172A' }}>{c.firstName} {c.lastName}</td>
+                                                    <td style={{ padding: '14px 20px', color: '#64748B' }}>{c.title}</td>
+                                                    <td style={{ padding: '14px 20px', color: '#64748B' }}>{emailText}</td>
+                                                    <td style={{ padding: '14px 20px', color: '#64748B' }}>{phoneText}</td>
+                                                    <td style={{ padding: '14px 20px', textAlign: 'right' }}>
+                                                        <button onClick={() => openUpdateModal(c)} style={{ background: 'transparent', border: 'none', color: '#2563EB', cursor: 'pointer', marginRight: '12px', fontWeight: '600' }}>Edit</button>
+                                                        <button onClick={() => { setSelectedContact(c); setShowDeleteModal(true); }} style={{ background: 'transparent', border: 'none', color: '#DC2626', cursor: 'pointer', fontWeight: '600' }}>Delete</button>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
                                         </tbody>
                                     </table>
                                 </div>
@@ -350,7 +371,8 @@ function Dashboard({ onLogout }) {
                         </div>
                     ) : (
                         <UserProfile
-                            contactsCount={contacts.length}
+                            username={displayName}
+                            contactsCount={safeContacts.length}
                             onOpenChangePassword={() => setShowChangePasswordModal(true)}
                         />
                     )}

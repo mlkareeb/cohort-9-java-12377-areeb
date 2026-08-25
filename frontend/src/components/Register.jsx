@@ -4,6 +4,7 @@ import { registerApi } from '../services/api';
 function Register({ onRegisterSuccess }) {
     const [username, setUsername] = useState('');
     const [email, setEmail] = useState('');
+    const [phoneNumber, setPhoneNumber] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
@@ -14,13 +15,14 @@ function Register({ onRegisterSuccess }) {
         setLoading(true);
 
         try {
-            await registerApi({ username, email, password });
+            await registerApi({ username, email, phoneNumber, password });
             setLoading(false);
-            // Instead of entering the dashboard, switch back to Sign In
             onRegisterSuccess();
         } catch (err) {
             setLoading(false);
-            setError(err.message || 'Registration failed. Please try again.');
+            // Captures the specific error message from the backend response if available
+            const errorMessage = err.response?.data?.message || err.response?.data || err.message || 'Registration failed. Please try again.';
+            setError(typeof errorMessage === 'string' ? errorMessage : JSON.stringify(errorMessage));
         }
     };
 
@@ -73,13 +75,25 @@ function Register({ onRegisterSuccess }) {
                             style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', border: '1px solid #ccc', outline: 'none', fontSize: '14px', boxSizing: 'border-box' }}
                         />
                     </div>
+                    <div style={{ marginBottom: '16px' }}>
+                        <label style={{ display: 'block', marginBottom: '6px', color: '#555', fontSize: '14px', fontWeight: '500' }}>Phone Number (10-15 digits)</label>
+                        <input
+                            type="text"
+                            value={phoneNumber}
+                            onChange={(e) => setPhoneNumber(e.target.value)}
+                            required
+                            placeholder="e.g. 03001234567"
+                            style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', border: '1px solid #ccc', outline: 'none', fontSize: '14px', boxSizing: 'border-box' }}
+                        />
+                    </div>
                     <div style={{ marginBottom: '20px' }}>
-                        <label style={{ display: 'block', marginBottom: '6px', color: '#555', fontSize: '14px', fontWeight: '500' }}>Password</label>
+                        <label style={{ display: 'block', marginBottom: '6px', color: '#555', fontSize: '14px', fontWeight: '500' }}>Password (min 6 chars)</label>
                         <input
                             type="password"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
                             required
+                            minLength={6}
                             placeholder="Create a password"
                             style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', border: '1px solid #ccc', outline: 'none', fontSize: '14px', boxSizing: 'border-box' }}
                         />

@@ -10,16 +10,30 @@ const getHeaders = () => {
     };
 };
 
+// Helper function to extract detailed backend error messages from fetch responses
+const handleApiError = async (response, defaultMessage) => {
+    const errorText = await response.text();
+    let errorMessage = defaultMessage;
+    try {
+        const errorJson = JSON.parse(errorText);
+        // Supports Spring Boot validation maps or error messages
+        errorMessage = errorJson.message || errorJson.error || JSON.stringify(errorJson);
+    } catch (e) {
+        if (errorText) errorMessage = errorText;
+    }
+    throw new Error(errorMessage);
+};
+
 // --- Auth API ---
-export const loginApi = async (email, password) => {
+export const loginApi = async (username, password) => {
     const response = await fetch(`${BASE_URL}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ username, password }),
     });
 
     if (!response.ok) {
-        throw new Error('Invalid email or password.');
+        await handleApiError(response, 'Invalid username or password.');
     }
 
     return await response.json();
@@ -31,7 +45,7 @@ export const fetchContactsApi = async () => {
         method: 'GET',
         headers: getHeaders()
     });
-    if (!response.ok) throw new Error('Failed to fetch contacts');
+    if (!response.ok) await handleApiError(response, 'Failed to fetch contacts');
     return await response.json();
 };
 
@@ -41,7 +55,7 @@ export const createContactApi = async (contactData) => {
         headers: getHeaders(),
         body: JSON.stringify(contactData)
     });
-    if (!response.ok) throw new Error('Failed to create contact');
+    if (!response.ok) await handleApiError(response, 'Failed to create contact');
     return await response.json();
 };
 
@@ -51,7 +65,7 @@ export const updateContactApi = async (id, contactData) => {
         headers: getHeaders(),
         body: JSON.stringify(contactData)
     });
-    if (!response.ok) throw new Error('Failed to update contact');
+    if (!response.ok) await handleApiError(response, 'Failed to update contact');
     return await response.json();
 };
 
@@ -60,7 +74,7 @@ export const deleteContactApi = async (id) => {
         method: 'DELETE',
         headers: getHeaders()
     });
-    if (!response.ok) throw new Error('Failed to delete contact');
+    if (!response.ok) await handleApiError(response, 'Failed to delete contact');
     return true;
 };
 
@@ -70,10 +84,9 @@ export const changePasswordApi = async (passwordData) => {
         headers: getHeaders(),
         body: JSON.stringify(passwordData)
     });
-    if (!response.ok) throw new Error('Failed to update password');
+    if (!response.ok) await handleApiError(response, 'Failed to update password');
     return await response.json();
 };
-
 
 // --- Register API ---
 export const registerApi = async (userData) => {
@@ -84,7 +97,7 @@ export const registerApi = async (userData) => {
     });
 
     if (!response.ok) {
-        throw new Error('Failed to register. Email may already be in use.');
+        await handleApiError(response, 'Failed to register. Please check your inputs.');
     }
 
     return await response.json();
@@ -98,7 +111,7 @@ export const getUserProfileApi = async () => {
     });
 
     if (!response.ok) {
-        throw new Error('Failed to fetch user profile.');
+        await handleApiError(response, 'Failed to fetch user profile.');
     }
 
     return await response.json();

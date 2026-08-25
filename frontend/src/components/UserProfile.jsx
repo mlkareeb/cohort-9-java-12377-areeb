@@ -1,70 +1,71 @@
-import React, { useState, useEffect } from 'react';
-import { getUserProfileApi } from '../services/api';
+import React from 'react';
 
-function UserProfile({ contactsCount, onOpenChangePassword }) {
-    const [user, setUser] = useState({ username: 'Loading...', email: 'Loading...' });
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => {
-        fetchProfile();
-    }, []);
-
-    const fetchProfile = async () => {
-        try {
-            const data = await getUserProfileApi();
-            setUser(data);
-            setLoading(false);
-        } catch (err) {
-            console.error('Failed to load user profile', err);
-            setLoading(false);
-        }
-    };
+function UserProfile({ username = 'test1', contactsCount = 0, onOpenChangePassword }) {
+    const displayUser = username || 'test1';
+    const initial = displayUser.charAt(0).toUpperCase();
 
     return (
-        <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: '24px', maxWidth: '900px' }}>
-
-            {/* Left Profile Card */}
-            <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '28px', textAlign: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
-                <div style={{ width: '72px', height: '72px', background: '#DBEAFE', color: '#2563EB', borderRadius: '50%', margin: '0 auto 16px auto', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px', fontWeight: '700' }}>
-                    {user.username ? user.username.charAt(0).toUpperCase() : 'U'}
-                </div>
-                <h3 style={{ margin: '0 0 4px 0', fontSize: '18px', color: '#0F172A' }}>{loading ? 'Loading...' : user.username}</h3>
-                <p style={{ margin: '0 0 20px 0', color: '#64748B', fontSize: '13px' }}>{loading ? 'Loading...' : user.email}</p>
-
-                <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '12px', display: 'flex', justifyContent: 'space-around' }}>
-                    <div>
-                        <div style={{ fontSize: '16px', fontWeight: '700', color: '#0F172A' }}>{contactsCount}</div>
-                        <div style={{ fontSize: '11px', color: '#64748B' }}>Contacts</div>
-                    </div>
-                    <div style={{ width: '1px', background: '#E2E8F0' }}></div>
-                    <div>
-                        <div style={{ fontSize: '16px', fontWeight: '700', color: '#2563EB' }}>2026</div>
-                        <div style={{ fontSize: '11px', color: '#64748B' }}>Joined</div>
-                    </div>
-                </div>
+        <div style={{ maxWidth: '900px', margin: '0 auto' }}>
+            <div style={{ marginBottom: '24px' }}>
+                <h1 style={{ margin: '0 0 4px 0', fontSize: '22px', fontWeight: '700', color: '#0F172A' }}>User Profile</h1>
+                <p style={{ margin: '0', color: '#64748B', fontSize: '13px' }}>View your account details and security settings.</p>
             </div>
 
-            {/* Right Account Information Form */}
-            <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '28px', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
-                <h2 style={{ margin: '0 0 20px 0', fontSize: '18px', color: '#0F172A' }}>Account Information</h2>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '24px' }}>
 
-                <div style={{ marginBottom: '16px' }}>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', color: '#64748B', marginBottom: '6px' }}>Display Username</label>
-                    <input type="text" value={loading ? 'Loading...' : user.username} readOnly style={{ width: '100%', padding: '10px 12px', background: '#F8FAFC', border: '1px solid #CBD5E1', borderRadius: '8px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }} />
-                </div>
-                <div style={{ marginBottom: '20px' }}>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', color: '#64748B', marginBottom: '6px' }}>Primary Email Address</label>
-                    <input type="email" value={loading ? 'Loading...' : user.email} readOnly style={{ width: '100%', padding: '10px 12px', background: '#F8FAFC', border: '1px solid #CBD5E1', borderRadius: '8px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }} />
+                {/* Left Card: Avatar & Summary */}
+                <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '32px 24px', textAlign: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+                    <div style={{ width: '72px', height: '72px', background: '#EFF6FF', color: '#2563EB', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '28px', fontWeight: '700', margin: '0 auto 16px auto' }}>
+                        {initial}
+                    </div>
+                    <h2 style={{ margin: '0 0 4px 0', fontSize: '18px', color: '#0F172A', fontWeight: '700' }}>{displayUser}</h2>
+                    <p style={{ margin: '0 0 24px 0', fontSize: '13px', color: '#64748B' }}>Standard User</p>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', borderTop: '1px solid #F1F5F9', paddingTop: '20px' }}>
+                        <div>
+                            <p style={{ margin: '0 0 2px 0', fontSize: '18px', fontWeight: '700', color: '#2563EB' }}>{contactsCount}</p>
+                            <p style={{ margin: '0', fontSize: '11px', color: '#64748B', fontWeight: '500' }}>Contacts</p>
+                        </div>
+                        <div>
+                            <p style={{ margin: '0 0 2px 0', fontSize: '18px', fontWeight: '700', color: '#0F172A' }}>2026</p>
+                            <p style={{ margin: '0', fontSize: '11px', color: '#64748B', fontWeight: '500' }}>Joined</p>
+                        </div>
+                    </div>
                 </div>
 
-                <button
-                    onClick={onOpenChangePassword}
-                    style={{ padding: '10px 16px', background: '#F8FAFC', color: '#0F172A', border: '1px solid #CBD5E1', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '13px' }}
-                >
-                    Change Password
-                </button>
+                {/* Right Card: Account Information Form / Actions */}
+                <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '32px', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+                    <h3 style={{ margin: '0 0 20px 0', fontSize: '16px', fontWeight: '700', color: '#0F172A' }}>Account Information</h3>
+
+                    <div style={{ marginBottom: '20px' }}>
+                        <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', color: '#64748B', marginBottom: '6px' }}>Display Username</label>
+                        <input
+                            type="text"
+                            readOnly
+                            value={displayUser}
+                            style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', background: '#F8FAFC', border: '1px solid #CBD5E1', color: '#0F172A', fontSize: '13px', boxSizing: 'border-box', outline: 'none' }}
+                        />
+                    </div>
+
+                    <div style={{ marginBottom: '24px' }}>
+                        <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', color: '#64748B', marginBottom: '6px' }}>Primary Account ID</label>
+                        <input
+                            type="text"
+                            readOnly
+                            value={`${displayUser}@contacthub.local`}
+                            style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', background: '#F8FAFC', border: '1px solid #CBD5E1', color: '#0F172A', fontSize: '13px', boxSizing: 'border-box', outline: 'none' }}
+                        />
+                    </div>
+
+                    <button
+                        onClick={onOpenChangePassword}
+                        style={{ padding: '10px 18px', background: '#FFFFFF', color: '#0F172A', border: '1px solid #CBD5E1', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}
+                    >
+                        Change Password
+                    </button>
+                </div>
+
             </div>
-
         </div>
     );
 }
