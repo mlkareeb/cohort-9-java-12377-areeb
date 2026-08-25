@@ -15,7 +15,6 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.annotation.*;
 
 import java.security.Principal;
@@ -33,13 +32,6 @@ public class ContactController {
         this.contactService = contactService;
         this.userRepository = userRepository;
         this.exportImportService = exportImportService;
-    }
-
-    // --- Exception Handler for Access Denied (Returns 403 instead of 500) ---
-    @SuppressWarnings("unused")
-    @ExceptionHandler(AccessDeniedException.class)
-    public ResponseEntity<String> handleAccessDeniedException(AccessDeniedException ex) {
-        return new ResponseEntity<>(ex.getMessage(), HttpStatus.FORBIDDEN);
     }
 
     private Long getUserId(Principal principal) {

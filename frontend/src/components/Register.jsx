@@ -12,17 +12,26 @@ function Register({ onRegisterSuccess }) {
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError('');
+
+        if (!email.trim() && !phoneNumber.trim()) {
+            setError('Please provide either an email address or a phone number.');
+            return;
+        }
+
         setLoading(true);
 
         try {
-            await registerApi({ username, email, phoneNumber, password });
+            await registerApi({
+                username,
+                email: email.trim() || undefined,
+                phoneNumber: phoneNumber.trim() || undefined,
+                password
+            });
             setLoading(false);
             onRegisterSuccess();
         } catch (err) {
             setLoading(false);
-            // Captures the specific error message from the backend response if available
-            const errorMessage = err.response?.data?.message || err.response?.data || err.message || 'Registration failed. Please try again.';
-            setError(typeof errorMessage === 'string' ? errorMessage : JSON.stringify(errorMessage));
+            setError(err.message || 'Registration failed. Please try again.');
         }
     };
 
@@ -65,23 +74,21 @@ function Register({ onRegisterSuccess }) {
                         />
                     </div>
                     <div style={{ marginBottom: '16px' }}>
-                        <label style={{ display: 'block', marginBottom: '6px', color: '#555', fontSize: '14px', fontWeight: '500' }}>Email Address</label>
+                        <label style={{ display: 'block', marginBottom: '6px', color: '#555', fontSize: '14px', fontWeight: '500' }}>Email Address (or provide phone below)</label>
                         <input
                             type="email"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
-                            required
                             placeholder="name@example.com"
                             style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', border: '1px solid #ccc', outline: 'none', fontSize: '14px', boxSizing: 'border-box' }}
                         />
                     </div>
                     <div style={{ marginBottom: '16px' }}>
-                        <label style={{ display: 'block', marginBottom: '6px', color: '#555', fontSize: '14px', fontWeight: '500' }}>Phone Number (10-15 digits)</label>
+                        <label style={{ display: 'block', marginBottom: '6px', color: '#555', fontSize: '14px', fontWeight: '500' }}>Phone Number (10-15 digits, or provide email above)</label>
                         <input
                             type="text"
                             value={phoneNumber}
                             onChange={(e) => setPhoneNumber(e.target.value)}
-                            required
                             placeholder="e.g. 03001234567"
                             style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', border: '1px solid #ccc', outline: 'none', fontSize: '14px', boxSizing: 'border-box' }}
                         />

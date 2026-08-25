@@ -16,8 +16,12 @@ const handleApiError = async (response, defaultMessage) => {
     let errorMessage = defaultMessage;
     try {
         const errorJson = JSON.parse(errorText);
-        // Supports Spring Boot validation maps or error messages
-        errorMessage = errorJson.message || errorJson.error || JSON.stringify(errorJson);
+        if (errorJson.errors) {
+            // field-level validation errors from MethodArgumentNotValidException
+            errorMessage = Object.values(errorJson.errors).join(', ');
+        } else {
+            errorMessage = errorJson.message || errorJson.error || JSON.stringify(errorJson);
+        }
     } catch (e) {
         if (errorText) errorMessage = errorText;
     }
@@ -25,27 +29,36 @@ const handleApiError = async (response, defaultMessage) => {
 };
 
 // --- Auth API ---
-export const loginApi = async (username, password) => {
+export const loginApi = async (usernameOrEmailOrPhone, password) => {
     const response = await fetch(`${BASE_URL}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ usernameOrEmailOrPhone, password }),
     });
 
     if (!response.ok) {
-        await handleApiError(response, 'Invalid username or password.');
+        await handleApiError(response, 'Invalid username, email, phone number, or password.');
     }
 
     return await response.json();
 };
 
 // --- Contacts API ---
-export const fetchContactsApi = async () => {
-    const response = await fetch(`${BASE_URL}/contacts`, {
+export const fetchContactsApi = async (page = 0, size = 10) => {
+    const response = await fetch(`${BASE_URL}/contacts?page=${page}&size=${size}`, {
         method: 'GET',
         headers: getHeaders()
     });
     if (!response.ok) await handleApiError(response, 'Failed to fetch contacts');
+    return await response.json(); // returns a Page object: { content, totalPages, totalElements, ... }
+};
+
+export const searchContactsApi = async (query, page = 0, size = 10) => {
+    const response = await fetch(`${BASE_URL}/contacts/search?query=${encodeURIComponent(query)}&page=${page}&size=${size}`, {
+        method: 'GET',
+        headers: getHeaders()
+    });
+    if (!response.ok) await handleApiError(response, 'Failed to search contacts');
     return await response.json();
 };
 
@@ -76,6 +89,25 @@ export const deleteContactApi = async (id) => {
     });
     if (!response.ok) await handleApiError(response, 'Failed to delete contact');
     return true;
+};
+
+export const exportContactsApi = async () => {
+    const response = await fetch(`${BASE_URL}/contacts/export`, {
+        method: 'GET',
+        headers: getHeaders()
+    });
+    if (!response.ok) await handleApiError(response, 'Failed to export contacts');
+    return await response.text(); // JSON string, used to trigger a file download
+};
+
+export const importContactsApi = async (jsonContent) => {
+    const response = await fetch(`${BASE_URL}/contacts/import`, {
+        method: 'POST',
+        headers: getHeaders(), // sends Content-Type: application/json — matches backend's @RequestBody String
+        body: jsonContent
+    });
+    if (!response.ok) await handleApiError(response, 'Failed to import contacts');
+    return await response.text();
 };
 
 export const changePasswordApi = async (passwordData) => {

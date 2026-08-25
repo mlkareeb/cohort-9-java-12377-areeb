@@ -39,11 +39,20 @@ public class AuthService {
     public AuthResponse register(RegisterRequest request) {
         log.info("Executing user registration request");
 
+        if (!request.isEmailOrPhonePresent()) {
+            throw new IllegalArgumentException("Either email or phone number is required");
+        }
+
         if (userRepository.existsByUsername(request.getUsername())) {
             throw new UserAlreadyExistsException("Username already exists");
         }
-        if (userRepository.existsByEmail(request.getEmail())) {
+        if (request.getEmail() != null && !request.getEmail().isBlank()
+                && userRepository.existsByEmail(request.getEmail())) {
             throw new UserAlreadyExistsException("Email already exists");
+        }
+        if (request.getPhoneNumber() != null && !request.getPhoneNumber().isBlank()
+                && userRepository.existsByPhoneNumber(request.getPhoneNumber())) {
+            throw new UserAlreadyExistsException("Phone number already exists");
         }
 
         User user = new User();
@@ -57,8 +66,8 @@ public class AuthService {
         } catch (DataIntegrityViolationException e) {
             Throwable rootCause = e.getRootCause();
             String message = (rootCause != null && rootCause.getMessage() != null) ? rootCause.getMessage().toLowerCase() : "";
-            if (message.contains("username") || message.contains("email") || message.contains("uk_")) {
-                throw new UserAlreadyExistsException("Username or Email already exists");
+            if (message.contains("username") || message.contains("email") || message.contains("phone") || message.contains("uk_")) {
+                throw new UserAlreadyExistsException("Username, email, or phone number already exists");
             }
             throw e;
         }
@@ -72,10 +81,10 @@ public class AuthService {
 
         authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(
-                        request.getUsername(), request.getPassword())
+                        request.getUsernameOrEmailOrPhone(), request.getPassword())
         );
 
-        User user = userRepository.findByUsername(request.getUsername())
+        User user = userRepository.findByUsernameOrEmailOrPhoneNumber(request.getUsernameOrEmailOrPhone())
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
         String token = jwtUtil.generateToken(user.getUsername());

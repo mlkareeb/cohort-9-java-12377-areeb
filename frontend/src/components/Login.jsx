@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { loginApi } from '../services/api';
 
 function Login({ onLoginSuccess }) {
-    const [username, setUsername] = useState('');
+    const [identifier, setIdentifier] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
@@ -13,7 +13,7 @@ function Login({ onLoginSuccess }) {
         setLoading(true);
 
         try {
-            const data = await loginApi(username, password);
+            const data = await loginApi(identifier, password);
 
             if (!data || !data.token) {
                 throw new Error('Authentication token missing from response.');
@@ -21,11 +21,11 @@ function Login({ onLoginSuccess }) {
 
             localStorage.setItem('token', data.token);
             setLoading(false);
-            onLoginSuccess(username);
+            onLoginSuccess(data.username || identifier);
         } catch (err) {
             setLoading(false);
-            const msg = err.response?.data?.message || err.response?.data || err.message || '';
-            setError(msg.toLowerCase().includes('bad credentials') ? 'Invalid username or password' : (msg || 'Failed to connect to the server.'));
+            const msg = err.message || '';
+            setError(msg.toLowerCase().includes('bad credentials') ? 'Invalid credentials' : (msg || 'Failed to connect to the server.'));
         }
     };
 
@@ -57,13 +57,13 @@ function Login({ onLoginSuccess }) {
 
                 <form onSubmit={handleSubmit}>
                     <div style={{ marginBottom: '16px' }}>
-                        <label style={{ display: 'block', marginBottom: '6px', color: '#555', fontSize: '14px', fontWeight: '500' }}>Username</label>
+                        <label style={{ display: 'block', marginBottom: '6px', color: '#555', fontSize: '14px', fontWeight: '500' }}>Username, Email, or Phone</label>
                         <input
                             type="text"
-                            value={username}
-                            onChange={(e) => setUsername(e.target.value)}
+                            value={identifier}
+                            onChange={(e) => setIdentifier(e.target.value)}
                             required
-                            placeholder="Enter your username"
+                            placeholder="Enter your username, email, or phone"
                             style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', border: '1px solid #ccc', outline: 'none', fontSize: '14px', boxSizing: 'border-box' }}
                         />
                     </div>

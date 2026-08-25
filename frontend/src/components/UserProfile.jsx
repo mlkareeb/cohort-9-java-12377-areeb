@@ -1,8 +1,10 @@
 import React from 'react';
 
-function UserProfile({ username = 'test1', contactsCount = 0, onOpenChangePassword }) {
-    const displayUser = username || 'test1';
+function UserProfile({ profile, username = 'User', contactsCount = 0, onOpenChangePassword }) {
+    const displayUser = profile?.username || username || 'User';
     const initial = displayUser.charAt(0).toUpperCase();
+    const email = profile?.email || 'Not provided';
+    const phoneNumber = profile?.phoneNumber || 'Not provided';
 
     return (
         <div style={{ maxWidth: '900px', margin: '0 auto' }}>
@@ -13,7 +15,6 @@ function UserProfile({ username = 'test1', contactsCount = 0, onOpenChangePasswo
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '24px' }}>
 
-                {/* Left Card: Avatar & Summary */}
                 <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '32px 24px', textAlign: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
                     <div style={{ width: '72px', height: '72px', background: '#EFF6FF', color: '#2563EB', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '28px', fontWeight: '700', margin: '0 auto 16px auto' }}>
                         {initial}
@@ -27,18 +28,17 @@ function UserProfile({ username = 'test1', contactsCount = 0, onOpenChangePasswo
                             <p style={{ margin: '0', fontSize: '11px', color: '#64748B', fontWeight: '500' }}>Contacts</p>
                         </div>
                         <div>
-                            <p style={{ margin: '0 0 2px 0', fontSize: '18px', fontWeight: '700', color: '#0F172A' }}>2026</p>
-                            <p style={{ margin: '0', fontSize: '11px', color: '#64748B', fontWeight: '500' }}>Joined</p>
+                            <p style={{ margin: '0 0 2px 0', fontSize: '18px', fontWeight: '700', color: '#0F172A' }}>{profile?.id ?? '-'}</p>
+                            <p style={{ margin: '0', fontSize: '11px', color: '#64748B', fontWeight: '500' }}>Account ID</p>
                         </div>
                     </div>
                 </div>
 
-                {/* Right Card: Account Information Form / Actions */}
                 <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '32px', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
                     <h3 style={{ margin: '0 0 20px 0', fontSize: '16px', fontWeight: '700', color: '#0F172A' }}>Account Information</h3>
 
                     <div style={{ marginBottom: '20px' }}>
-                        <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', color: '#64748B', marginBottom: '6px' }}>Display Username</label>
+                        <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', color: '#64748B', marginBottom: '6px' }}>Username</label>
                         <input
                             type="text"
                             readOnly
@@ -47,12 +47,22 @@ function UserProfile({ username = 'test1', contactsCount = 0, onOpenChangePasswo
                         />
                     </div>
 
-                    <div style={{ marginBottom: '24px' }}>
-                        <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', color: '#64748B', marginBottom: '6px' }}>Primary Account ID</label>
+                    <div style={{ marginBottom: '20px' }}>
+                        <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', color: '#64748B', marginBottom: '6px' }}>Email Address</label>
                         <input
                             type="text"
                             readOnly
-                            value={`${displayUser}@contacthub.local`}
+                            value={email}
+                            style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', background: '#F8FAFC', border: '1px solid #CBD5E1', color: '#0F172A', fontSize: '13px', boxSizing: 'border-box', outline: 'none' }}
+                        />
+                    </div>
+
+                    <div style={{ marginBottom: '24px' }}>
+                        <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', color: '#64748B', marginBottom: '6px' }}>Phone Number</label>
+                        <input
+                            type="text"
+                            readOnly
+                            value={phoneNumber}
                             style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', background: '#F8FAFC', border: '1px solid #CBD5E1', color: '#0F172A', fontSize: '13px', boxSizing: 'border-box', outline: 'none' }}
                         />
                     </div>

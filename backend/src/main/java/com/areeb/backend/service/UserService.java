@@ -35,17 +35,19 @@ public class UserService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid request body");
         }
 
-        String oldPass = request.getOldPassword();
-        log.info("DEBUG - Old Password Received: {}", oldPass);
+        log.info("Processing password change request for username: {}", username);
 
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found with username: " + username));
 
+        String oldPass = request.getOldPassword();
         if (oldPass == null || !passwordEncoder.matches(oldPass, user.getPassword())) {
+            log.warn("Failed password change attempt for username: {} - incorrect old password", username);
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid old password");
         }
 
         user.setPassword(passwordEncoder.encode(request.getNewPassword()));
         userRepository.save(user);
+        log.info("Password successfully changed for username: {}", username);
     }
 }

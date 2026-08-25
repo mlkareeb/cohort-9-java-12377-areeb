@@ -1,13 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import UserProfile from './UserProfile';
 import ContactCard from './ContactCard';
 import { exportContactsToFile, importContactsFromFile } from './fileUtils';
 import {
     fetchContactsApi,
+    searchContactsApi,
     createContactApi,
     updateContactApi,
     deleteContactApi,
-    changePasswordApi
+    changePasswordApi,
+    getUserProfileApi
 } from '../services/api';
 
 function Dashboard({ username, onLogout }) {
@@ -15,9 +17,13 @@ function Dashboard({ username, onLogout }) {
     const [viewMode, setViewMode] = useState('card');
 
     const [contacts, setContacts] = useState([]);
+    const [totalPages, setTotalPages] = useState(1);
+    const [totalContacts, setTotalContacts] = useState(0);
     const [searchQuery, setSearchQuery] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
     const contactsPerPage = 6;
+
+    const [profile, setProfile] = useState(null);
 
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [showUpdateModal, setShowUpdateModal] = useState(false);
@@ -41,47 +47,51 @@ function Dashboard({ username, onLogout }) {
         setTimeout(() => setToastMessage(null), 4000);
     };
 
-    const loadContacts = async () => {
+    // Loads one page of contacts from the backend, using the search endpoint when a query is present
+    const loadContacts = useCallback(async (page = currentPage, query = searchQuery) => {
         try {
-            const data = await fetchContactsApi();
-            console.log("Fetched contacts response:", data);
+            const backendPage = page - 1; // backend pages are 0-indexed
+            const data = query && query.trim() !== ''
+                ? await searchContactsApi(query.trim(), backendPage, contactsPerPage)
+                : await fetchContactsApi(backendPage, contactsPerPage);
 
-            let listToSet = [];
-            if (Array.isArray(data)) {
-                listToSet = data;
-            } else if (data && typeof data === 'object') {
-                listToSet = data.content || data.contacts || data.data || Object.values(data).find(Array.isArray) || [];
-            }
-
-            setContacts(Array.isArray(listToSet) ? listToSet : []);
+            const list = Array.isArray(data?.content) ? data.content : [];
+            setContacts(list);
+            setTotalPages(data?.totalPages || 1);
+            setTotalContacts(data?.totalElements ?? list.length);
         } catch (error) {
             triggerToast('Failed to load contacts from database.');
             setContacts([]);
+            setTotalPages(1);
+            setTotalContacts(0);
         }
-    };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [currentPage, searchQuery]);
+
+    // Reset to page 1 whenever the search changes, so we don't get stuck on a page that no longer exists
+    useEffect(() => {
+        setCurrentPage(1);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [searchQuery]);
 
     useEffect(() => {
-        loadContacts();
+        loadContacts(currentPage, searchQuery);
         // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [currentPage, searchQuery]);
+
+    useEffect(() => {
+        const loadProfile = async () => {
+            try {
+                const data = await getUserProfileApi();
+                setProfile(data);
+            } catch (error) {
+                triggerToast('Failed to load profile information.');
+            }
+        };
+        loadProfile();
     }, []);
 
     const safeContacts = Array.isArray(contacts) ? contacts : [];
-    const filteredContacts = safeContacts.filter(c =>
-        (c.firstName?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
-        (c.lastName?.toLowerCase() || '').includes(searchQuery.toLowerCase())
-    );
-
-    const totalPages = Math.ceil(filteredContacts.length / contactsPerPage) || 1;
-
-    useEffect(() => {
-        if (currentPage > totalPages) {
-            setCurrentPage(totalPages);
-        }
-    }, [totalPages, currentPage]);
-
-    const indexOfLastContact = currentPage * contactsPerPage;
-    const indexOfFirstContact = indexOfLastContact - contactsPerPage;
-    const currentContacts = filteredContacts.slice(indexOfFirstContact, indexOfLastContact);
 
     const handleCreateContact = async (e) => {
         e.preventDefault();
@@ -144,9 +154,9 @@ function Dashboard({ username, onLogout }) {
     const handleDeleteConfirm = async () => {
         try {
             await deleteContactApi(selectedContact.id);
-            setContacts(safeContacts.filter(c => c.id !== selectedContact.id));
             setShowDeleteModal(false);
             setSelectedContact(null);
+            await loadContacts();
             triggerToast('Contact removed.');
         } catch (error) {
             triggerToast('Error deleting contact.');
@@ -156,30 +166,36 @@ function Dashboard({ username, onLogout }) {
     const handlePasswordReset = async (e) => {
         e.preventDefault();
         try {
-            // Mapped currentPassword state to oldPassword payload to match ChangePasswordRequest DTO
             await changePasswordApi({ oldPassword: currentPassword, newPassword });
             setShowChangePasswordModal(false);
             setCurrentPassword('');
             setNewPassword('');
             triggerToast('Password updated successfully.');
         } catch (error) {
-            const backendMsg = error.response?.data?.message || error.response?.data;
-            const errorMsg = typeof backendMsg === 'string' ? backendMsg : (error.message || 'Failed to update password.');
-
-            if (errorMsg.toLowerCase().includes('internal server') || errorMsg.toLowerCase().includes('500') || errorMsg.toLowerCase().includes('bad credentials')) {
-                triggerToast('Error: Incorrect current password.');
-            } else {
-                triggerToast(`Error: ${errorMsg}`);
-            }
+            triggerToast(`Error: ${error.message || 'Failed to update password.'}`);
         }
     };
 
-    const handleExportContacts = () => {
-        exportContactsToFile(safeContacts, triggerToast);
+    // Export needs the FULL contact list, not just the current page, so fetch it fresh
+    const handleExportContacts = async () => {
+        try {
+            const fullData = await fetchContactsApi(0, 1000);
+            const fullList = Array.isArray(fullData?.content) ? fullData.content : [];
+            exportContactsToFile(fullList, triggerToast);
+        } catch (error) {
+            triggerToast('Failed to export contacts.');
+        }
     };
 
+    // Import dedup also needs the FULL contact list to avoid re-adding contacts that live on other pages
     const handleImportContacts = async (e) => {
-        importContactsFromFile(e, safeContacts, setContacts, loadContacts, triggerToast);
+        try {
+            const fullData = await fetchContactsApi(0, 1000);
+            const fullList = Array.isArray(fullData?.content) ? fullData.content : [];
+            importContactsFromFile(e, fullList, setContacts, () => loadContacts(currentPage, searchQuery), triggerToast);
+        } catch (error) {
+            triggerToast('Failed to read existing contacts before import.');
+        }
     };
 
     const displayName = username || 'User';
@@ -187,14 +203,12 @@ function Dashboard({ username, onLogout }) {
     return (
         <div style={{ minHeight: '100vh', background: '#F8FAFC', color: '#1E293B', fontFamily: 'Inter, system-ui, sans-serif', display: 'flex', boxSizing: 'border-box' }}>
 
-            {/* Toast Notification */}
             {toastMessage && (
                 <div style={{ position: 'fixed', top: '24px', right: '24px', zIndex: 2000, background: '#FFFFFF', border: '1px solid #E2E8F0', padding: '12px 20px', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', fontSize: '14px', fontWeight: '500', color: '#0F172A', maxWidth: '400px', wordBreak: 'break-word' }}>
                     {toastMessage}
                 </div>
             )}
 
-            {/* Sidebar */}
             <div style={{ width: '260px', background: '#FFFFFF', borderRight: '1px solid #E2E8F0', padding: '28px 20px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', boxSizing: 'border-box' }}>
                 <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '32px', paddingLeft: '8px' }}>
@@ -217,7 +231,6 @@ function Dashboard({ username, onLogout }) {
                     </div>
                 </div>
 
-                {/* User Profile Quick-Badge at Bottom */}
                 <div style={{ background: '#F8FAFC', padding: '12px 16px', borderRadius: '10px', border: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <div style={{ width: '32px', height: '32px', background: '#2563EB', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '700', fontSize: '13px', color: '#FFFFFF' }}>
@@ -232,10 +245,8 @@ function Dashboard({ username, onLogout }) {
                 </div>
             </div>
 
-            {/* Main Content Area */}
             <div style={{ flex: '1', display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
 
-                {/* Top Header Command Bar */}
                 <div style={{ height: '72px', background: '#FFFFFF', borderBottom: '1px solid #E2E8F0', padding: '0 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxSizing: 'border-box' }}>
                     <div style={{ position: 'relative', width: '340px' }}>
                         <input
@@ -257,7 +268,6 @@ function Dashboard({ username, onLogout }) {
                     </div>
                 </div>
 
-                {/* Dynamic Workspace Area */}
                 <div style={{ flex: '1', padding: '32px', overflowY: 'auto', boxSizing: 'border-box' }}>
 
                     {activeTab === 'contacts' ? (
@@ -310,7 +320,7 @@ function Dashboard({ username, onLogout }) {
 
                             {viewMode === 'card' ? (
                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px', marginBottom: '28px' }}>
-                                    {currentContacts.map(contact => (
+                                    {safeContacts.map(contact => (
                                         <ContactCard
                                             key={contact.id}
                                             contact={contact}
@@ -332,7 +342,7 @@ function Dashboard({ username, onLogout }) {
                                         </tr>
                                         </thead>
                                         <tbody>
-                                        {currentContacts.map(c => {
+                                        {safeContacts.map(c => {
                                             const emailText = typeof c.emails === 'object' && c.emails !== null && !Array.isArray(c.emails) ? (c.emails['Work'] || Object.values(c.emails)[0]) : c.emails?.[0]?.address;
                                             const phoneText = typeof c.phoneNumbers === 'object' && c.phoneNumbers !== null && !Array.isArray(c.phoneNumbers) ? (c.phoneNumbers['Mobile'] || Object.values(c.phoneNumbers)[0]) : c.phoneNumbers?.[0]?.number;
                                             return (
@@ -353,10 +363,9 @@ function Dashboard({ username, onLogout }) {
                                 </div>
                             )}
 
-                            {/* Pagination Bar */}
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#FFFFFF', border: '1px solid #E2E8F0', padding: '12px 20px', borderRadius: '10px', boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
                                 <span style={{ fontSize: '13px', color: '#64748B' }}>
-                                    Page {currentPage} of {totalPages}
+                                    Page {currentPage} of {totalPages} &middot; {totalContacts} total contacts
                                 </span>
                                 <div style={{ display: 'flex', gap: '8px' }}>
                                     <button
@@ -379,15 +388,15 @@ function Dashboard({ username, onLogout }) {
                         </div>
                     ) : (
                         <UserProfile
+                            profile={profile}
                             username={displayName}
-                            contactsCount={safeContacts.length}
+                            contactsCount={totalContacts}
                             onOpenChangePassword={() => setShowChangePasswordModal(true)}
                         />
                     )}
                 </div>
             </div>
 
-            {/* Create / Update Modal */}
             {(showCreateModal || showUpdateModal) && (
                 <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15, 23, 42, 0.4)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
                     <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', padding: '32px', borderRadius: '12px', width: '100%', maxWidth: '400px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', boxSizing: 'border-box' }}>
@@ -408,7 +417,6 @@ function Dashboard({ username, onLogout }) {
                 </div>
             )}
 
-            {/* Change Password Modal */}
             {showChangePasswordModal && (
                 <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15, 23, 42, 0.4)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
                     <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', padding: '32px', borderRadius: '12px', width: '100%', maxWidth: '400px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', boxSizing: 'border-box' }}>
@@ -432,7 +440,6 @@ function Dashboard({ username, onLogout }) {
                 </div>
             )}
 
-            {/* Delete Confirmation Modal */}
             {showDeleteModal && (
                 <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15, 23, 42, 0.4)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
                     <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', padding: '32px', borderRadius: '12px', width: '100%', maxWidth: '360px', textAlign: 'center', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', boxSizing: 'border-box' }}>

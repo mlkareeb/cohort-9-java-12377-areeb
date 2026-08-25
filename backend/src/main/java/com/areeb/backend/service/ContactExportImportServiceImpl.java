@@ -9,6 +9,8 @@ import com.areeb.backend.repository.UserRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,6 +21,8 @@ import java.util.List;
 
 @Service
 public class ContactExportImportServiceImpl implements ContactExportImportService {
+
+    private static final Logger log = LoggerFactory.getLogger(ContactExportImportServiceImpl.class);
 
     private final ContactRepository contactRepository;
     private final UserRepository userRepository;
@@ -33,6 +37,8 @@ public class ContactExportImportServiceImpl implements ContactExportImportServic
 
     @Override
     public String exportContactsToJson(Long userId) {
+        log.info("Exporting contacts for userId: {}", userId);
+
         List<Contact> contacts = contactRepository.findByUserId(userId);
         List<ContactDto> contactDtos = new ArrayList<>();
 
@@ -49,8 +55,11 @@ public class ContactExportImportServiceImpl implements ContactExportImportServic
         }
 
         try {
-            return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(contactDtos);
+            String result = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(contactDtos);
+            log.info("Exported {} contacts for userId: {}", contactDtos.size(), userId);
+            return result;
         } catch (Exception e) {
+            log.error("Failed to export contacts for userId: {}", userId, e);
             throw new IllegalArgumentException("Failed to export contacts: " + e.getMessage(), e);
         }
     }
@@ -58,6 +67,8 @@ public class ContactExportImportServiceImpl implements ContactExportImportServic
     @Override
     @Transactional
     public void importContactsFromJson(Long userId, String jsonContent) {
+        log.info("Importing contacts for userId: {}", userId);
+
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
 
@@ -87,7 +98,10 @@ public class ContactExportImportServiceImpl implements ContactExportImportServic
 
                 contactRepository.save(contact);
             }
+
+            log.info("Imported {} contacts for userId: {}", contactDtos.size(), userId);
         } catch (JsonProcessingException e) {
+            log.error("Invalid JSON during contact import for userId: {}", userId, e);
             throw new IllegalArgumentException("Invalid JSON format for contact import: " + e.getMessage(), e);
         }
     }

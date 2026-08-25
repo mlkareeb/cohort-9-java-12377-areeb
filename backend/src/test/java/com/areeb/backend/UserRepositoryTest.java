@@ -47,4 +47,18 @@ class UserRepositoryTest {
         boolean exists = userRepository.existsByEmail("jane@example.com");
         assertTrue(exists);
     }
+
+    @Test
+    void testFindByUsernameOrEmailOrPhoneNumber() {
+        User user = new User();
+        user.setUsername("mike_doe");
+        user.setEmail("mike@example.com");
+        user.setPassword("encoded_password");
+        user.setPhoneNumber("5551234567");
+        userRepository.save(user);
+
+        assertTrue(userRepository.findByUsernameOrEmailOrPhoneNumber("mike_doe").isPresent());
+        assertTrue(userRepository.findByUsernameOrEmailOrPhoneNumber("mike@example.com").isPresent());
+        assertTrue(userRepository.findByUsernameOrEmailOrPhoneNumber("5551234567").isPresent());
+    }
 }

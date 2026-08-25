@@ -12,3 +12,10 @@ spring:
 jwt:
   secret: ${JWT_SECRET}
   expiration: 86400000
+
+logging:
+  level:
+    root: INFO
+    com.areeb.backend: DEBUG
+  file:
+    name: logs/backend.log

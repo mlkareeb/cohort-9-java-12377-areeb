@@ -11,8 +11,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Optional;
 
@@ -60,7 +60,7 @@ class UserServiceTest {
     void testGetUserProfile_NotFound() {
         when(userRepository.findByUsername("unknown")).thenReturn(Optional.empty());
 
-        assertThrows(UsernameNotFoundException.class, () -> userService.getUserProfile("unknown"));
+        assertThrows(ResponseStatusException.class, () -> userService.getUserProfile("unknown"));
     }
 
     @Test
@@ -84,7 +84,7 @@ class UserServiceTest {
         when(userRepository.findByUsername("areeb")).thenReturn(Optional.of(testUser));
         when(passwordEncoder.matches("wrongOldPass", "oldEncodedPassword")).thenReturn(false);
 
-        assertThrows(IllegalArgumentException.class, () -> userService.changePassword("areeb", request));
+        assertThrows(ResponseStatusException.class, () -> userService.changePassword("areeb", request));
 
         verify(userRepository, never()).save(any(User.class));
     }
