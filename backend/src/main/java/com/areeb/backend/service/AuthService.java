@@ -43,16 +43,17 @@ public class AuthService {
             throw new IllegalArgumentException("Either email or phone number is required");
         }
 
-        if (userRepository.existsByUsername(request.getUsername())) {
-            throw new UserAlreadyExistsException("Username already exists");
+        // Cross-check all identity fields to prevent collisions across columns
+        if (userRepository.existsAnywhere(request.getUsername())) {
+            throw new UserAlreadyExistsException("Username already exists in the system");
         }
         if (request.getEmail() != null && !request.getEmail().isBlank()
-                && userRepository.existsByEmail(request.getEmail())) {
-            throw new UserAlreadyExistsException("Email already exists");
+                && userRepository.existsAnywhere(request.getEmail())) {
+            throw new UserAlreadyExistsException("Email already exists in the system");
         }
         if (request.getPhoneNumber() != null && !request.getPhoneNumber().isBlank()
-                && userRepository.existsByPhoneNumber(request.getPhoneNumber())) {
-            throw new UserAlreadyExistsException("Phone number already exists");
+                && userRepository.existsAnywhere(request.getPhoneNumber())) {
+            throw new UserAlreadyExistsException("Phone number already exists in the system");
         }
 
         User user = new User();

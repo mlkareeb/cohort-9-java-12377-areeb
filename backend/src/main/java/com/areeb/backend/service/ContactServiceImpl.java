@@ -35,6 +35,13 @@ public class ContactServiceImpl implements ContactService {
     public ContactDto createContact(Long userId, ContactDto contactDto) {
         log.info("Creating contact for userId: {}", userId);
 
+        if (contactDto.getFirstName() == null || contactDto.getFirstName().isBlank()) {
+            throw new IllegalArgumentException("First name is required and cannot be blank");
+        }
+        if (contactDto.getLastName() == null || contactDto.getLastName().isBlank()) {
+            throw new IllegalArgumentException("Last name is required and cannot be blank");
+        }
+
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
 
@@ -50,6 +57,13 @@ public class ContactServiceImpl implements ContactService {
     @Override
     public ContactDto updateContact(Long userId, Long contactId, ContactDto contactDto) {
         log.info("Updating contact id: {} for userId: {}", contactId, userId);
+
+        if (contactDto.getFirstName() == null || contactDto.getFirstName().isBlank()) {
+            throw new IllegalArgumentException("First name is required and cannot be blank");
+        }
+        if (contactDto.getLastName() == null || contactDto.getLastName().isBlank()) {
+            throw new IllegalArgumentException("Last name is required and cannot be blank");
+        }
 
         Contact contact = contactRepository.findById(contactId)
                 .orElseThrow(() -> new ResourceNotFoundException(CONTACT_NOT_FOUND + contactId));

@@ -37,3 +37,69 @@
 2026-08-26T02:28:30.129-07:00  INFO 17648 --- [backend] [SpringApplicationShutdownHook] j.LocalContainerEntityManagerFactoryBean : Closing JPA EntityManagerFactory for persistence unit 'default'
 2026-08-26T02:28:30.132-07:00  INFO 17648 --- [backend] [SpringApplicationShutdownHook] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Shutdown initiated...
 2026-08-26T02:28:30.140-07:00  INFO 17648 --- [backend] [SpringApplicationShutdownHook] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Shutdown completed.
+2026-08-26T08:05:16.052-07:00  INFO 25592 --- [backend] [main] com.areeb.backend.BackendApplication     : Starting BackendApplication using Java 21.0.11 with PID 25592 (C:\Users\malik\cohort-9-java-12377-areeb\backend\target\classes started by malik in C:\Users\malik\cohort-9-java-12377-areeb\backend)
+2026-08-26T08:05:16.057-07:00 DEBUG 25592 --- [backend] [main] com.areeb.backend.BackendApplication     : Running with Spring Boot v4.0.7, Spring v7.0.8
+2026-08-26T08:05:16.058-07:00  INFO 25592 --- [backend] [main] com.areeb.backend.BackendApplication     : The following 1 profile is active: "dev"
+2026-08-26T08:05:16.971-07:00  INFO 25592 --- [backend] [main] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-08-26T08:05:17.061-07:00  INFO 25592 --- [backend] [main] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 74 ms. Found 2 JPA repository interfaces.
+2026-08-26T08:05:17.821-07:00  INFO 25592 --- [backend] [main] o.s.boot.tomcat.TomcatWebServer          : Tomcat initialized with port 8080 (http)
+2026-08-26T08:05:17.841-07:00  INFO 25592 --- [backend] [main] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+2026-08-26T08:05:17.842-07:00  INFO 25592 --- [backend] [main] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/11.0.22]
+2026-08-26T08:05:17.923-07:00  INFO 25592 --- [backend] [main] b.w.c.s.WebApplicationContextInitializer : Root WebApplicationContext: initialization completed in 1799 ms
+2026-08-26T08:05:18.203-07:00  INFO 25592 --- [backend] [main] org.hibernate.orm.jpa                    : HHH008540: Processing PersistenceUnitInfo [name: default]
+2026-08-26T08:05:18.293-07:00  INFO 25592 --- [backend] [main] org.hibernate.orm.core                   : HHH000001: Hibernate ORM core version 7.2.19.Final
+2026-08-26T08:05:19.009-07:00  INFO 25592 --- [backend] [main] o.s.o.j.p.SpringPersistenceUnitInfo      : No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-08-26T08:05:19.084-07:00  INFO 25592 --- [backend] [main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2026-08-26T08:05:19.967-07:00  INFO 25592 --- [backend] [main] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection ConnectionID:1 ClientConnectionId: b1056e5a-1b9a-4298-bfd1-14a86ccfe565
+2026-08-26T08:05:19.971-07:00  INFO 25592 --- [backend] [main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+2026-08-26T08:05:20.412-07:00  INFO 25592 --- [backend] [main] org.hibernate.orm.connections.pooling    : HHH10001005: Database info:
+	Database JDBC URL [jdbc:sqlserver://localhost:1433;concatNullYieldsNull=ON;quotedIdentifier=ON;connectRetryInterval=10;connectRetryCount=1;maxResultBuffer=-1;sendTemporalDataTypesAsStringForBulkCopy=true;delayLoadingLobs=true;useFmtOnly=false;vectorTypeSupport=v1;cacheBulkCopyMetadata=false;bulkCopyForBatchInsertAllowEncryptedValueModifications=false;bulkCopyForBatchInsertTableLock=false;bulkCopyForBatchInsertKeepNulls=false;bulkCopyForBatchInsertKeepIdentity=false;bulkCopyForBatchInsertFireTriggers=false;bulkCopyForBatchInsertCheckConstraints=false;bulkCopyForBatchInsertBatchSize=0;useBulkCopyForBatchInsert=false;cancelQueryTimeout=-1;sslProtocol=TLS;calcBigDecimalPrecision=false;useDefaultJaasConfig=false;jaasConfigurationName=SQLJDBCDriver;statementPoolingCacheSize=0;serverPreparedStatementDiscardThreshold=10;enablePrepareOnFirstPreparedStatementCall=false;fips=false;socketTimeout=0;authentication=NotSpecified;authenticationScheme=nativeAuthentication;xopenStates=false;datetimeParameterType=datetime2;sendTimeAsDatetime=true;replication=false;trustStoreType=JKS;trustServerCertificate=true;TransparentNetworkIPResolution=true;iPAddressPreference=IPv4First;serverNameAsACE=false;sendStringParametersAsUnicode=true;selectMethod=direct;responseBuffering=adaptive;queryTimeout=-1;packetSize=8000;multiSubnetFailover=false;loginTimeout=30;lockTimeout=-1;lastUpdateCount=true;useDefaultGSSCredential=false;prepareMethod=prepexec;encrypt=true;disableStatementPooling=true;databaseName=contact_manager;columnEncryptionSetting=Disabled;applicationName=Microsoft JDBC Driver for SQL Server;applicationIntent=readwrite;]
+	Database driver: Microsoft JDBC Driver 13.2 for SQL Server
+	Database dialect: SQLServerDialect
+	Database version: 17.0
+	Default catalog/schema: contact_manager/dbo
+	Autocommit mode: undefined/unknown
+	Isolation level: READ_COMMITTED [default READ_COMMITTED]
+	JDBC fetch size: 128
+	Pool: DataSourceConnectionProvider
+	Minimum pool size: undefined/unknown
+	Maximum pool size: undefined/unknown
+2026-08-26T08:05:21.991-07:00  INFO 25592 --- [backend] [main] org.hibernate.orm.core                   : HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-08-26T08:05:24.132-07:00  INFO 25592 --- [backend] [main] j.LocalContainerEntityManagerFactoryBean : Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-08-26T08:05:24.220-07:00  INFO 25592 --- [backend] [main] o.s.d.j.r.query.QueryEnhancerFactories   : Hibernate is in classpath; If applicable, HQL parser will be used.
+2026-08-26T08:05:25.833-07:00 DEBUG 25592 --- [backend] [main] c.areeb.backend.security.JwtAuthFilter   : Filter 'jwtAuthFilter' configured for use
+2026-08-26T08:05:25.894-07:00  INFO 25592 --- [backend] [main] r$InitializeUserDetailsManagerConfigurer : Global AuthenticationManager configured with UserDetailsService bean with name userDetailsServiceImpl
+2026-08-26T08:05:27.167-07:00  INFO 25592 --- [backend] [main] o.s.boot.tomcat.TomcatWebServer          : Tomcat started on port 8080 (http) with context path '/'
+2026-08-26T08:05:27.174-07:00  INFO 25592 --- [backend] [main] com.areeb.backend.BackendApplication     : Started BackendApplication in 11.86 seconds (process running for 12.449)
+2026-08-26T08:06:42.397-07:00  INFO 25592 --- [backend] [http-nio-8080-exec-2] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring DispatcherServlet 'dispatcherServlet'
+2026-08-26T08:06:42.403-07:00  INFO 25592 --- [backend] [http-nio-8080-exec-2] o.s.web.servlet.DispatcherServlet        : Initializing Servlet 'dispatcherServlet'
+2026-08-26T08:06:42.430-07:00  INFO 25592 --- [backend] [http-nio-8080-exec-2] o.s.web.servlet.DispatcherServlet        : Completed initialization in 26 ms
+2026-08-26T08:06:42.753-07:00  INFO 25592 --- [backend] [http-nio-8080-exec-1] com.areeb.backend.service.AuthService    : Executing user authentication request
+2026-08-26T08:06:43.828-07:00  WARN 25592 --- [backend] [http-nio-8080-exec-5] ration$PageModule$WarningLoggingModifier : Serializing PageImpl instances as-is is not supported, meaning that there is no guarantee about the stability of the resulting JSON structure!
+	For a stable JSON structure, please use Spring Data's PagedModel (globally via @EnableSpringDataWebSupport(pageSerializationMode = VIA_DTO))
+	or Spring HATEOAS and Spring Data's PagedResourcesAssembler as documented in https://docs.spring.io/spring-data/commons/reference/repositories/core-extensions.html#core.web.pageables.
+
+2026-08-26T08:07:25.486-07:00  INFO 25592 --- [backend] [http-nio-8080-exec-1] c.a.backend.service.ContactServiceImpl   : Updating contact id: 8 for userId: 2
+2026-08-26T08:07:25.528-07:00  INFO 25592 --- [backend] [http-nio-8080-exec-1] c.a.backend.service.ContactServiceImpl   : Updated contact id: 8
+2026-08-26T08:07:45.279-07:00  INFO 25592 --- [backend] [http-nio-8080-exec-5] c.a.backend.service.ContactServiceImpl   : Updating contact id: 8 for userId: 2
+2026-08-26T08:07:45.286-07:00  INFO 25592 --- [backend] [http-nio-8080-exec-5] c.a.backend.service.ContactServiceImpl   : Updated contact id: 8
+2026-08-26T08:08:14.660-07:00  INFO 25592 --- [backend] [http-nio-8080-exec-10] c.a.backend.service.ContactServiceImpl   : Updating contact id: 8 for userId: 2
+2026-08-26T08:08:14.666-07:00  INFO 25592 --- [backend] [http-nio-8080-exec-10] c.a.backend.service.ContactServiceImpl   : Updated contact id: 8
+2026-08-26T08:08:30.398-07:00 ERROR 25592 --- [backend] [http-nio-8080-exec-2] c.a.b.exception.GlobalExceptionHandler   : Validation failed: Validation failed for argument [1] in public org.springframework.http.ResponseEntity<java.lang.String> com.areeb.backend.controller.UserController.changePassword(org.springframework.security.core.Authentication,com.areeb.backend.dto.ChangePasswordRequest): [Field error in object 'changePasswordRequest' on field 'newPassword': rejected value [1122]; codes [Size.changePasswordRequest.newPassword,Size.newPassword,Size.java.lang.String,Size]; arguments [org.springframework.context.support.DefaultMessageSourceResolvable: codes [changePasswordRequest.newPassword,newPassword]; arguments []; default message [newPassword],2147483647,6]; default message [New password must be at least 6 characters]] 
+2026-08-26T08:08:35.950-07:00  INFO 25592 --- [backend] [http-nio-8080-exec-3] com.areeb.backend.service.UserService    : Processing password change request for username: test1
+2026-08-26T08:08:36.072-07:00  WARN 25592 --- [backend] [http-nio-8080-exec-3] com.areeb.backend.service.UserService    : Failed password change attempt for username: test1 - incorrect old password
+2026-08-26T08:08:36.076-07:00 ERROR 25592 --- [backend] [http-nio-8080-exec-3] c.a.b.exception.GlobalExceptionHandler   : Response status exception: Invalid old password
+2026-08-26T08:08:53.857-07:00  INFO 25592 --- [backend] [http-nio-8080-exec-8] com.areeb.backend.service.UserService    : Processing password change request for username: test1
+2026-08-26T08:08:54.151-07:00  INFO 25592 --- [backend] [http-nio-8080-exec-8] com.areeb.backend.service.UserService    : Password successfully changed for username: test1
+2026-08-26T08:09:02.582-07:00  INFO 25592 --- [backend] [http-nio-8080-exec-10] com.areeb.backend.service.AuthService    : Executing user authentication request
+2026-08-26T08:09:02.711-07:00 ERROR 25592 --- [backend] [http-nio-8080-exec-10] c.a.b.exception.GlobalExceptionHandler   : Bad credentials: Bad credentials
+2026-08-26T08:09:07.128-07:00  INFO 25592 --- [backend] [http-nio-8080-exec-9] com.areeb.backend.service.AuthService    : Executing user authentication request
+2026-08-26T08:09:26.271-07:00  INFO 25592 --- [backend] [http-nio-8080-exec-9] com.areeb.backend.service.UserService    : Processing password change request for username: test1
+2026-08-26T08:09:26.515-07:00  INFO 25592 --- [backend] [http-nio-8080-exec-9] com.areeb.backend.service.UserService    : Password successfully changed for username: test1
+2026-08-26T08:10:00.212-07:00  INFO 25592 --- [backend] [http-nio-8080-exec-9] com.areeb.backend.service.AuthService    : Executing user authentication request
+2026-08-26T08:10:00.355-07:00 ERROR 25592 --- [backend] [http-nio-8080-exec-9] c.a.b.exception.GlobalExceptionHandler   : Bad credentials: Bad credentials
+2026-08-26T08:15:11.888-07:00  INFO 25592 --- [backend] [SpringApplicationShutdownHook] o.s.boot.tomcat.GracefulShutdown         : Commencing graceful shutdown. Waiting for active requests to complete
+2026-08-26T08:15:11.993-07:00  INFO 25592 --- [backend] [tomcat-shutdown] o.s.boot.tomcat.GracefulShutdown         : Graceful shutdown complete
+2026-08-26T08:15:12.139-07:00  INFO 25592 --- [backend] [SpringApplicationShutdownHook] j.LocalContainerEntityManagerFactoryBean : Closing JPA EntityManagerFactory for persistence unit 'default'
+2026-08-26T08:15:12.298-07:00  INFO 25592 --- [backend] [SpringApplicationShutdownHook] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Shutdown initiated...
+2026-08-26T08:15:12.401-07:00  INFO 25592 --- [backend] [SpringApplicationShutdownHook] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Shutdown completed.
