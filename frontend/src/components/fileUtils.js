@@ -1,5 +1,29 @@
 import { createContactApi } from '../services/api';
 
+// Converts a labeled map (e.g. { Work: "a@b.com", Personal: "c@d.com" })
+// into "Work=a@b.com;Personal=c@d.com" for storage in the .txt file
+const mapToInline = (map) => {
+    if (!map || typeof map !== 'object') return '';
+    return Object.entries(map)
+        .filter(([, value]) => value)
+        .map(([label, value]) => `${label}=${value}`)
+        .join(';');
+};
+
+// Reverses mapToInline: "Work=a@b.com;Personal=c@d.com" -> { Work: "a@b.com", Personal: "c@d.com" }
+const inlineToMap = (inline) => {
+    const map = {};
+    if (!inline) return map;
+    inline.split(';').forEach(pair => {
+        const [label, ...rest] = pair.split('=');
+        const value = rest.join('=').trim();
+        if (label && value) {
+            map[label.trim()] = value;
+        }
+    });
+    return map;
+};
+
 // --- Export Contacts to TXT File ---
 export const exportContactsToFile = (contacts, triggerToast) => {
     try {
@@ -9,33 +33,10 @@ export const exportContactsToFile = (contacts, triggerToast) => {
         }
 
         const fileContent = contacts.map(c => {
-            // Safely extract email from Map or fallback if array
-            let emailStr = 'N/A';
-            if (c.emails) {
-                if (!Array.isArray(c.emails) && typeof c.emails === 'object') {
-                    emailStr = c.emails['Work'] || Object.values(c.emails)[0] || 'N/A';
-                } else if (Array.isArray(c.emails) && c.emails.length > 0) {
-                    emailStr = c.emails[0]?.address || c.emails[0] || 'N/A';
-                }
-            }
+            const emailsInline = mapToInline(c.emails) || 'N/A';
+            const phonesInline = mapToInline(c.phoneNumbers) || 'N/A';
 
-            // Safely extract phone number from Map or fallback if array
-            let phoneStr = 'N/A';
-            if (c.phoneNumbers) {
-                if (!Array.isArray(c.phoneNumbers) && typeof c.phoneNumbers === 'object') {
-                    phoneStr = c.phoneNumbers['Mobile'] || Object.values(c.phoneNumbers)[0] || 'N/A';
-                } else if (Array.isArray(c.phoneNumbers) && c.phoneNumbers.length > 0) {
-                    phoneStr = c.phoneNumbers[0]?.number || c.phoneNumbers[0] || 'N/A';
-                }
-            } else if (c.phones) {
-                if (!Array.isArray(c.phones) && typeof c.phones === 'object') {
-                    phoneStr = c.phones['Mobile'] || Object.values(c.phones)[0] || 'N/A';
-                } else if (Array.isArray(c.phones) && c.phones.length > 0) {
-                    phoneStr = c.phones[0]?.number || c.phones[0] || 'N/A';
-                }
-            }
-
-            return `Name: ${c.firstName || ''} ${c.lastName || ''} | Title: ${c.title || ''} | Email: ${emailStr} | Phone: ${phoneStr}`;
+            return `Name: ${c.firstName || ''} ${c.lastName || ''} | Title: ${c.title || ''} | Emails: ${emailsInline} | Phones: ${phonesInline}`;
         }).join('\n');
 
         const blob = new Blob([fileContent], { type: 'text/plain;charset=utf-8;' });
@@ -51,7 +52,7 @@ export const exportContactsToFile = (contacts, triggerToast) => {
     }
 };
 
-// --- Import Contacts from TXT File (Fixed Duplicate Prevention & Database Sync) ---
+// --- Import Contacts from TXT File (multi-label aware, with duplicate prevention) ---
 export const importContactsFromFile = (e, currentContacts, setContacts, reloadContacts, triggerToast) => {
     const fileReader = new FileReader();
     if (e.target.files && e.target.files[0]) {
@@ -72,41 +73,39 @@ export const importContactsFromFile = (e, currentContacts, setContacts, reloadCo
                         if (parts.length >= 4) {
                             const namePart = parts[0].replace('Name:', '').trim().split(' ');
                             const titlePart = parts[1].replace('Title:', '').trim();
-                            const emailPart = parts[2].replace('Email:', '').trim();
-                            const phonePart = parts[3].replace('Phone:', '').trim();
+                            const emailsPart = parts[2].replace('Emails:', '').trim();
+                            const phonesPart = parts[3].replace('Phones:', '').trim();
 
                             parsedContacts.push({
                                 firstName: namePart[0] || 'Unknown',
                                 lastName: namePart.slice(1).join(' ') || '',
                                 title: titlePart,
-                                emails: { Work: emailPart },
-                                phoneNumbers: { Mobile: phonePart }
+                                emails: inlineToMap(emailsPart === 'N/A' ? '' : emailsPart),
+                                phoneNumbers: inlineToMap(phonesPart === 'N/A' ? '' : phonesPart)
                             });
                         }
                     }
                 });
 
                 if (parsedContacts.length > 0) {
-                    // Extract existing emails from current database contacts cleanly
-                    const existingEmails = new Set(
-                        currentContacts.map(c => {
-                            if (!c.emails) return '';
-                            if (!Array.isArray(c.emails) && typeof c.emails === 'object') {
-                                return (c.emails['Work'] || Object.values(c.emails)[0] || '').toLowerCase().trim();
-                            }
-                            return (c.emails[0]?.address || c.emails[0] || '').toLowerCase().trim();
-                        })
-                    );
+                    // A contact is a "duplicate" if ANY of its emails matches ANY
+                    // existing contact's email (not just a single hardcoded label)
+                    const existingEmails = new Set();
+                    currentContacts.forEach(c => {
+                        Object.values(c.emails || {}).forEach(val => {
+                            if (val) existingEmails.add(String(val).toLowerCase().trim());
+                        });
+                    });
 
                     const uniqueNewContacts = parsedContacts.filter(c => {
-                        const email = (c.emails['Work'] || '').toLowerCase().trim();
-                        if (!email) return false;
+                        const emailValues = Object.values(c.emails || {}).map(v => String(v).toLowerCase().trim());
+                        const isDuplicate = emailValues.some(email => email && existingEmails.has(email));
 
-                        if (existingEmails.has(email)) {
+                        if (isDuplicate || emailValues.every(email => !email)) {
                             return false;
                         }
 
-                        existingEmails.add(email);
+                        emailValues.forEach(email => { if (email) existingEmails.add(email); });
                         return true;
                     });
 

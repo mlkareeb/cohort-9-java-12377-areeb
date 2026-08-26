@@ -12,6 +12,9 @@ import {
     getUserProfileApi
 } from '../services/api';
 
+let entryIdCounter = 0;
+const nextEntryId = () => `entry-${entryIdCounter++}`;
+
 function Dashboard({ username, onLogout }) {
     const [activeTab, setActiveTab] = useState('contacts');
     const [viewMode, setViewMode] = useState('card');
@@ -34,8 +37,12 @@ function Dashboard({ username, onLogout }) {
     const [firstName, setFirstName] = useState('');
     const [lastName, setLastName] = useState('');
     const [title, setTitle] = useState('');
-    const [email, setEmail] = useState('');
-    const [phone, setPhone] = useState('');
+
+    // Emails/phones are now lists of { id, label, value } so a contact
+    // can hold multiple labeled entries (Work, Personal, Home, etc.)
+    // instead of a single hardcoded "Work" email / "Mobile" phone.
+    const [emailEntries, setEmailEntries] = useState([{ id: nextEntryId(), label: 'Work', value: '' }]);
+    const [phoneEntries, setPhoneEntries] = useState([{ id: nextEntryId(), label: 'Mobile', value: '' }]);
 
     const [currentPassword, setCurrentPassword] = useState('');
     const [newPassword, setNewPassword] = useState('');
@@ -45,6 +52,46 @@ function Dashboard({ username, onLogout }) {
     const triggerToast = (msg) => {
         setToastMessage(msg);
         setTimeout(() => setToastMessage(null), 4000);
+    };
+
+    const resetContactForm = () => {
+        setFirstName('');
+        setLastName('');
+        setTitle('');
+        setEmailEntries([{ id: nextEntryId(), label: 'Work', value: '' }]);
+        setPhoneEntries([{ id: nextEntryId(), label: 'Mobile', value: '' }]);
+    };
+
+    const addEmailEntry = () => setEmailEntries(prev => [...prev, { id: nextEntryId(), label: '', value: '' }]);
+    const removeEmailEntry = (id) => setEmailEntries(prev => prev.filter(e => e.id !== id));
+    const updateEmailEntry = (id, field, val) =>
+        setEmailEntries(prev => prev.map(e => (e.id === id ? { ...e, [field]: val } : e)));
+
+    const addPhoneEntry = () => setPhoneEntries(prev => [...prev, { id: nextEntryId(), label: '', value: '' }]);
+    const removePhoneEntry = (id) => setPhoneEntries(prev => prev.filter(p => p.id !== id));
+    const updatePhoneEntry = (id, field, val) =>
+        setPhoneEntries(prev => prev.map(p => (p.id === id ? { ...p, [field]: val } : p)));
+
+    // Converts the {id, label, value} entries back into the labeled map
+    // shape the backend expects, e.g. { Work: "a@b.com", Personal: "c@d.com" }
+    const entriesToMap = (entries) => {
+        const map = {};
+        entries.forEach(({ label, value }) => {
+            const trimmedLabel = (label || '').trim();
+            const trimmedValue = (value || '').trim();
+            if (trimmedLabel && trimmedValue) {
+                map[trimmedLabel] = trimmedValue;
+            }
+        });
+        return map;
+    };
+
+    // Converts a labeled map from the backend into editable {id, label, value} entries
+    const mapToEntries = (map, fallbackLabel) => {
+        if (map && typeof map === 'object' && !Array.isArray(map) && Object.keys(map).length > 0) {
+            return Object.entries(map).map(([label, value]) => ({ id: nextEntryId(), label, value }));
+        }
+        return [{ id: nextEntryId(), label: fallbackLabel, value: '' }];
     };
 
     // Loads one page of contacts from the backend, using the search endpoint when a query is present
@@ -100,13 +147,13 @@ function Dashboard({ username, onLogout }) {
                 firstName,
                 lastName,
                 title,
-                emails: { Work: email },
-                phoneNumbers: { Mobile: phone }
+                emails: entriesToMap(emailEntries),
+                phoneNumbers: entriesToMap(phoneEntries)
             };
             await createContactApi(newEntry);
             await loadContacts();
             setShowCreateModal(false);
-            setFirstName(''); setLastName(''); setTitle(''); setEmail(''); setPhone('');
+            resetContactForm();
             triggerToast('Contact added successfully.');
         } catch (error) {
             triggerToast(`Error: ${error.message}`);
@@ -118,17 +165,8 @@ function Dashboard({ username, onLogout }) {
         setFirstName(contact.firstName);
         setLastName(contact.lastName);
         setTitle(contact.title);
-
-        const emailVal = typeof contact.emails === 'object' && contact.emails !== null && !Array.isArray(contact.emails)
-            ? (contact.emails['Work'] || Object.values(contact.emails)[0] || '')
-            : (contact.emails?.[0]?.address || '');
-
-        const phoneVal = typeof contact.phoneNumbers === 'object' && contact.phoneNumbers !== null && !Array.isArray(contact.phoneNumbers)
-            ? (contact.phoneNumbers['Mobile'] || Object.values(contact.phoneNumbers)[0] || '')
-            : (contact.phoneNumbers?.[0]?.number || '');
-
-        setEmail(emailVal);
-        setPhone(phoneVal);
+        setEmailEntries(mapToEntries(contact.emails, 'Work'));
+        setPhoneEntries(mapToEntries(contact.phoneNumbers, 'Mobile'));
         setShowUpdateModal(true);
     };
 
@@ -139,12 +177,13 @@ function Dashboard({ username, onLogout }) {
                 firstName,
                 lastName,
                 title,
-                emails: { Work: email },
-                phoneNumbers: { Mobile: phone }
+                emails: entriesToMap(emailEntries),
+                phoneNumbers: entriesToMap(phoneEntries)
             };
             await updateContactApi(selectedContact.id, updatedData);
             await loadContacts();
             setShowUpdateModal(false);
+            resetContactForm();
             triggerToast('Contact updated successfully.');
         } catch (error) {
             triggerToast(`Error: ${error.message}`);
@@ -199,6 +238,13 @@ function Dashboard({ username, onLogout }) {
     };
 
     const displayName = username || 'User';
+
+    const getPrimary = (map, preferredLabel) => {
+        if (!map || typeof map !== 'object') return '';
+        if (map[preferredLabel]) return map[preferredLabel];
+        const values = Object.values(map);
+        return values.length > 0 ? values[0] : '';
+    };
 
     return (
         <div style={{ minHeight: '100vh', background: '#F8FAFC', color: '#1E293B', fontFamily: 'Inter, system-ui, sans-serif', display: 'flex', boxSizing: 'border-box' }}>
@@ -260,7 +306,7 @@ function Dashboard({ username, onLogout }) {
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                         <button
-                            onClick={() => setShowCreateModal(true)}
+                            onClick={() => { resetContactForm(); setShowCreateModal(true); }}
                             style={{ padding: '9px 18px', background: '#2563EB', color: '#FFFFFF', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}
                         >
                             + Add Contact
@@ -343,8 +389,8 @@ function Dashboard({ username, onLogout }) {
                                         </thead>
                                         <tbody>
                                         {safeContacts.map(c => {
-                                            const emailText = typeof c.emails === 'object' && c.emails !== null && !Array.isArray(c.emails) ? (c.emails['Work'] || Object.values(c.emails)[0]) : c.emails?.[0]?.address;
-                                            const phoneText = typeof c.phoneNumbers === 'object' && c.phoneNumbers !== null && !Array.isArray(c.phoneNumbers) ? (c.phoneNumbers['Mobile'] || Object.values(c.phoneNumbers)[0]) : c.phoneNumbers?.[0]?.number;
+                                            const emailText = getPrimary(c.emails, 'Work');
+                                            const phoneText = getPrimary(c.phoneNumbers, 'Mobile');
                                             return (
                                                 <tr key={c.id} style={{ borderBottom: '1px solid #F1F5F9' }}>
                                                     <td style={{ padding: '14px 20px', fontWeight: '600', color: '#0F172A' }}>{c.firstName} {c.lastName}</td>
@@ -399,18 +445,68 @@ function Dashboard({ username, onLogout }) {
 
             {(showCreateModal || showUpdateModal) && (
                 <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15, 23, 42, 0.4)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
-                    <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', padding: '32px', borderRadius: '12px', width: '100%', maxWidth: '400px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', boxSizing: 'border-box' }}>
+                    <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', padding: '32px', borderRadius: '12px', width: '100%', maxWidth: '440px', maxHeight: '85vh', overflowY: 'auto', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', boxSizing: 'border-box' }}>
                         <h3 style={{ margin: '0 0 20px 0', fontSize: '18px', color: '#0F172A', fontWeight: '700' }}>{showCreateModal ? 'Create Contact' : 'Edit Contact'}</h3>
                         <form onSubmit={showCreateModal ? handleCreateContact : handleUpdateContact}>
                             <div style={{ marginBottom: '12px' }}><label style={{ fontSize: '12px', fontWeight: '500', color: '#64748B' }}>First Name</label><input type="text" value={firstName} onChange={e => setFirstName(e.target.value)} required style={{ width: '100%', padding: '9px 12px', borderRadius: '6px', background: '#F8FAFC', border: '1px solid #CBD5E1', color: '#0F172A', boxSizing: 'border-box', marginTop: '4px' }} /></div>
                             <div style={{ marginBottom: '12px' }}><label style={{ fontSize: '12px', fontWeight: '500', color: '#64748B' }}>Last Name</label><input type="text" value={lastName} onChange={e => setLastName(e.target.value)} required style={{ width: '100%', padding: '9px 12px', borderRadius: '6px', background: '#F8FAFC', border: '1px solid #CBD5E1', color: '#0F172A', boxSizing: 'border-box', marginTop: '4px' }} /></div>
-                            <div style={{ marginBottom: '12px' }}><label style={{ fontSize: '12px', fontWeight: '500', color: '#64748B' }}>Title / Role</label><input type="text" value={title} onChange={e => setTitle(e.target.value)} required style={{ width: '100%', padding: '9px 12px', borderRadius: '6px', background: '#F8FAFC', border: '1px solid #CBD5E1', color: '#0F172A', boxSizing: 'border-box', marginTop: '4px' }} /></div>
-                            <div style={{ marginBottom: '12px' }}><label style={{ fontSize: '12px', fontWeight: '500', color: '#64748B' }}>Email</label><input type="email" value={email} onChange={e => setEmail(e.target.value)} required style={{ width: '100%', padding: '9px 12px', borderRadius: '6px', background: '#F8FAFC', border: '1px solid #CBD5E1', color: '#0F172A', boxSizing: 'border-box', marginTop: '4px' }} /></div>
-                            <div style={{ marginBottom: '24px' }}><label style={{ fontSize: '12px', fontWeight: '500', color: '#64748B' }}>Phone Number</label><input type="text" value={phone} onChange={e => setPhone(e.target.value)} required style={{ width: '100%', padding: '9px 12px', borderRadius: '6px', background: '#F8FAFC', border: '1px solid #CBD5E1', color: '#0F172A', boxSizing: 'border-box', marginTop: '4px' }} /></div>
+                            <div style={{ marginBottom: '16px' }}><label style={{ fontSize: '12px', fontWeight: '500', color: '#64748B' }}>Title / Role</label><input type="text" value={title} onChange={e => setTitle(e.target.value)} required style={{ width: '100%', padding: '9px 12px', borderRadius: '6px', background: '#F8FAFC', border: '1px solid #CBD5E1', color: '#0F172A', boxSizing: 'border-box', marginTop: '4px' }} /></div>
+
+                            <div style={{ marginBottom: '16px' }}>
+                                <label style={{ fontSize: '12px', fontWeight: '500', color: '#64748B' }}>Email Addresses</label>
+                                {emailEntries.map((entry) => (
+                                    <div key={entry.id} style={{ display: 'flex', gap: '6px', marginTop: '6px' }}>
+                                        <input
+                                            type="text"
+                                            placeholder="Label (Work, Personal...)"
+                                            value={entry.label}
+                                            onChange={e => updateEmailEntry(entry.id, 'label', e.target.value)}
+                                            style={{ width: '38%', padding: '9px 10px', borderRadius: '6px', background: '#F8FAFC', border: '1px solid #CBD5E1', color: '#0F172A', boxSizing: 'border-box' }}
+                                        />
+                                        <input
+                                            type="email"
+                                            placeholder="email@example.com"
+                                            value={entry.value}
+                                            onChange={e => updateEmailEntry(entry.id, 'value', e.target.value)}
+                                            style={{ flex: '1', padding: '9px 10px', borderRadius: '6px', background: '#F8FAFC', border: '1px solid #CBD5E1', color: '#0F172A', boxSizing: 'border-box' }}
+                                        />
+                                        {emailEntries.length > 1 && (
+                                            <button type="button" onClick={() => removeEmailEntry(entry.id)} style={{ background: 'transparent', border: 'none', color: '#DC2626', cursor: 'pointer', fontWeight: '700', padding: '0 6px' }}>×</button>
+                                        )}
+                                    </div>
+                                ))}
+                                <button type="button" onClick={addEmailEntry} style={{ marginTop: '8px', background: 'transparent', border: 'none', color: '#2563EB', fontSize: '12px', fontWeight: '600', cursor: 'pointer', padding: 0 }}>+ Add another email</button>
+                            </div>
+
+                            <div style={{ marginBottom: '24px' }}>
+                                <label style={{ fontSize: '12px', fontWeight: '500', color: '#64748B' }}>Phone Numbers</label>
+                                {phoneEntries.map((entry) => (
+                                    <div key={entry.id} style={{ display: 'flex', gap: '6px', marginTop: '6px' }}>
+                                        <input
+                                            type="text"
+                                            placeholder="Label (Mobile, Home...)"
+                                            value={entry.label}
+                                            onChange={e => updatePhoneEntry(entry.id, 'label', e.target.value)}
+                                            style={{ width: '38%', padding: '9px 10px', borderRadius: '6px', background: '#F8FAFC', border: '1px solid #CBD5E1', color: '#0F172A', boxSizing: 'border-box' }}
+                                        />
+                                        <input
+                                            type="text"
+                                            placeholder="Phone number"
+                                            value={entry.value}
+                                            onChange={e => updatePhoneEntry(entry.id, 'value', e.target.value)}
+                                            style={{ flex: '1', padding: '9px 10px', borderRadius: '6px', background: '#F8FAFC', border: '1px solid #CBD5E1', color: '#0F172A', boxSizing: 'border-box' }}
+                                        />
+                                        {phoneEntries.length > 1 && (
+                                            <button type="button" onClick={() => removePhoneEntry(entry.id)} style={{ background: 'transparent', border: 'none', color: '#DC2626', cursor: 'pointer', fontWeight: '700', padding: '0 6px' }}>×</button>
+                                        )}
+                                    </div>
+                                ))}
+                                <button type="button" onClick={addPhoneEntry} style={{ marginTop: '8px', background: 'transparent', border: 'none', color: '#2563EB', fontSize: '12px', fontWeight: '600', cursor: 'pointer', padding: 0 }}>+ Add another phone</button>
+                            </div>
 
                             <div style={{ display: 'flex', gap: '10px' }}>
                                 <button type="submit" style={{ flex: '1', padding: '10px', background: '#2563EB', color: '#FFFFFF', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer' }}>Save Contact</button>
-                                <button type="button" onClick={() => { setShowCreateModal(false); setShowUpdateModal(false); }} style={{ flex: '1', padding: '10px', background: '#F1F5F9', color: '#0F172A', border: '1px solid #CBD5E1', borderRadius: '8px', fontWeight: '600', cursor: 'pointer' }}>Cancel</button>
+                                <button type="button" onClick={() => { setShowCreateModal(false); setShowUpdateModal(false); resetContactForm(); }} style={{ flex: '1', padding: '10px', background: '#F1F5F9', color: '#0F172A', border: '1px solid #CBD5E1', borderRadius: '8px', fontWeight: '600', cursor: 'pointer' }}>Cancel</button>
                             </div>
                         </form>
                     </div>

@@ -3,25 +3,27 @@ import React from 'react';
 function ContactCard({ contact, onEdit, onDelete }) {
     if (!contact) return null;
 
-    // Safely extract email regardless of format (Map or Array or undefined)
-    let emailStr = 'No email';
-    if (contact.emails) {
-        if (!Array.isArray(contact.emails) && typeof contact.emails === 'object') {
-            emailStr = contact.emails['Work'] || Object.values(contact.emails)[0] || 'No email';
-        } else if (Array.isArray(contact.emails) && contact.emails.length > 0) {
-            emailStr = contact.emails[0]?.address || contact.emails[0] || 'No email';
+    // Converts a labeled map (or legacy array format) into a list of { label, value } entries
+    const toEntryList = (data, fallbackLabel) => {
+        if (!data) return [];
+        if (!Array.isArray(data) && typeof data === 'object') {
+            return Object.entries(data)
+                .filter(([, value]) => value)
+                .map(([label, value]) => ({ label, value }));
         }
-    }
+        if (Array.isArray(data) && data.length > 0) {
+            return data
+                .map(item => ({
+                    label: fallbackLabel,
+                    value: item?.address || item?.number || item
+                }))
+                .filter(entry => entry.value);
+        }
+        return [];
+    };
 
-    // Safely extract phone number regardless of format (Map or Array or undefined)
-    let phoneStr = 'No phone';
-    if (contact.phoneNumbers) {
-        if (!Array.isArray(contact.phoneNumbers) && typeof contact.phoneNumbers === 'object') {
-            phoneStr = contact.phoneNumbers['Mobile'] || Object.values(contact.phoneNumbers)[0] || 'No phone';
-        } else if (Array.isArray(contact.phoneNumbers) && contact.phoneNumbers.length > 0) {
-            phoneStr = contact.phoneNumbers[0]?.number || contact.phoneNumbers[0] || 'No phone';
-        }
-    }
+    const emailEntries = toEntryList(contact.emails, 'Email');
+    const phoneEntries = toEntryList(contact.phoneNumbers, 'Phone');
 
     return (
         <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '20px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', boxShadow: '0 1px 3px rgba(0,0,0,0.02)', boxSizing: 'border-box' }}>
@@ -38,8 +40,20 @@ function ContactCard({ contact, onEdit, onDelete }) {
                 </div>
 
                 <div style={{ fontSize: '13px', color: '#64748B', display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '16px' }}>
-                    <div>📧 {emailStr}</div>
-                    <div>📞 {phoneStr}</div>
+                    {emailEntries.length > 0 ? (
+                        emailEntries.map((entry, idx) => (
+                            <div key={`email-${idx}`}>📧 <span style={{ fontWeight: '600', color: '#475569' }}>{entry.label}:</span> {entry.value}</div>
+                        ))
+                    ) : (
+                        <div>📧 No email</div>
+                    )}
+                    {phoneEntries.length > 0 ? (
+                        phoneEntries.map((entry, idx) => (
+                            <div key={`phone-${idx}`}>📞 <span style={{ fontWeight: '600', color: '#475569' }}>{entry.label}:</span> {entry.value}</div>
+                        ))
+                    ) : (
+                        <div>📞 No phone</div>
+                    )}
                 </div>
             </div>
 

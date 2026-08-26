@@ -21,14 +21,22 @@ function Register({ onRegisterSuccess }) {
         setLoading(true);
 
         try {
-            await registerApi({
+            const data = await registerApi({
                 username,
                 email: email.trim() || undefined,
                 phoneNumber: phoneNumber.trim() || undefined,
                 password
             });
+
+            // Backend returns a token on successful registration too —
+            // store it and log the user straight in, so App.js can redirect
+            // to the Contact Management screen without a second login step.
+            if (data?.token) {
+                localStorage.setItem('token', data.token);
+            }
+
             setLoading(false);
-            onRegisterSuccess();
+            onRegisterSuccess(data?.username || username);
         } catch (err) {
             setLoading(false);
             setError(err.message || 'Registration failed. Please try again.');

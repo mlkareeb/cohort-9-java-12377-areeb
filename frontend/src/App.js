@@ -13,6 +13,14 @@ function App() {
         setIsLoggedIn(true);
     };
 
+    // Registration now logs the user straight in and redirects to the
+    // dashboard, matching "redirect to contact management screen upon
+    // successful login OR registration" from the spec.
+    const handleRegisterSuccess = (registeredUser) => {
+        setUsername(registeredUser || 'User');
+        setIsLoggedIn(true);
+    };
+
     const handleLogout = () => {
         localStorage.removeItem('token');
         setUsername('');
@@ -67,7 +75,7 @@ function App() {
             {isLogin ? (
                 <Login onLoginSuccess={handleLoginSuccess} />
             ) : (
-                <Register onRegisterSuccess={() => setIsLogin(true)} />
+                <Register onRegisterSuccess={handleRegisterSuccess} />
             )}
         </div>
     );
