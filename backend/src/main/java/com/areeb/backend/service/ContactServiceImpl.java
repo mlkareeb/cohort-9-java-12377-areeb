@@ -35,6 +35,9 @@ public class ContactServiceImpl implements ContactService {
     public ContactDto createContact(Long userId, ContactDto contactDto) {
         log.info("Creating contact for userId: {}", userId);
 
+        if (contactDto == null) {
+            throw new IllegalArgumentException("Contact data cannot be null");
+        }
         if (contactDto.getFirstName() == null || contactDto.getFirstName().isBlank()) {
             throw new IllegalArgumentException("First name is required and cannot be blank");
         }
@@ -58,6 +61,9 @@ public class ContactServiceImpl implements ContactService {
     public ContactDto updateContact(Long userId, Long contactId, ContactDto contactDto) {
         log.info("Updating contact id: {} for userId: {}", contactId, userId);
 
+        if (contactDto == null) {
+            throw new IllegalArgumentException("Contact data cannot be null");
+        }
         if (contactDto.getFirstName() == null || contactDto.getFirstName().isBlank()) {
             throw new IllegalArgumentException("First name is required and cannot be blank");
         }
