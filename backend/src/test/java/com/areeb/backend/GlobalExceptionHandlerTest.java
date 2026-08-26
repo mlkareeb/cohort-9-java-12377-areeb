@@ -67,13 +67,16 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
-    void testHandleValidationException() {
+    void testHandleValidationException() throws NoSuchMethodException {
         BindingResult bindingResult = new BeanPropertyBindingResult(new Object(), "target");
         bindingResult.addError(new FieldError(
                 "target", "password", "Password must be at least 6 characters"));
 
+        MethodParameter methodParameter = new MethodParameter(
+                GlobalExceptionHandlerTest.class.getDeclaredMethod("dummyMethod", String.class), 0);
+
         MethodArgumentNotValidException ex =
-                new MethodArgumentNotValidException((MethodParameter) null, bindingResult);
+                new MethodArgumentNotValidException(methodParameter, bindingResult);
 
         ResponseEntity<Map<String, Object>> response = exceptionHandler.handleValidationException(ex);
 
@@ -84,5 +87,13 @@ class GlobalExceptionHandlerTest {
         @SuppressWarnings("unchecked")
         Map<String, String> errors = (Map<String, String>) response.getBody().get("errors");
         assertEquals("Password must be at least 6 characters", errors.get("password"));
+    }
+
+    @SuppressWarnings("unused")
+    private void dummyMethod(String password) {
+        // This dummy method is intentionally empty and used purely for MethodParameter reflection in unit tests.
+        if (password == null) {
+            throw new IllegalArgumentException();
+        }
     }
 }
