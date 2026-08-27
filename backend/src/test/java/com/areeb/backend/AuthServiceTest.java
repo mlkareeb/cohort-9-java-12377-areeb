@@ -40,6 +40,7 @@ class AuthServiceTest {
     @InjectMocks
     private AuthService authService;
 
+    // Test user registration with valid credentials and lenient stubbing
     @Test
     void testRegister_Success() {
         RegisterRequest request = new RegisterRequest();
