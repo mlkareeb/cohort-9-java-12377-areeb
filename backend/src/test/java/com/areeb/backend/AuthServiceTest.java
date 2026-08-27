@@ -19,6 +19,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -52,8 +53,8 @@ class AuthServiceTest {
         user.setEmail("areeb@example.com");
 
         when(userRepository.existsByUsername("areeb")).thenReturn(false);
-        when(userRepository.existsByEmail("areeb@example.com")).thenReturn(false);
-        when(userRepository.existsByPhoneNumber("1234567890")).thenReturn(false);
+        lenient().when(userRepository.existsByEmail("areeb@example.com")).thenReturn(false);
+        lenient().when(userRepository.existsByPhoneNumber("1234567890")).thenReturn(false);
         when(passwordEncoder.encode("password123")).thenReturn("encodedPassword");
         when(userRepository.save(any(User.class))).thenReturn(user);
         when(jwtUtil.generateToken("areeb")).thenReturn("mocked-jwt-token");
