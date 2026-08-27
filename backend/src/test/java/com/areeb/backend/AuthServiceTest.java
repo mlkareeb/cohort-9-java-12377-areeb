@@ -19,7 +19,6 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -40,7 +39,6 @@ class AuthServiceTest {
     @InjectMocks
     private AuthService authService;
 
-    // Test user registration with valid credentials and lenient stubbing
     @Test
     void testRegister_Success() {
         RegisterRequest request = new RegisterRequest();
@@ -53,9 +51,11 @@ class AuthServiceTest {
         user.setUsername("areeb");
         user.setEmail("areeb@example.com");
 
-        when(userRepository.existsByUsername("areeb")).thenReturn(false);
-        lenient().when(userRepository.existsByEmail("areeb@example.com")).thenReturn(false);
-        lenient().when(userRepository.existsByPhoneNumber("1234567890")).thenReturn(false);
+        // The exact match for your AuthService implementation
+        when(userRepository.existsAnywhere("areeb")).thenReturn(false);
+        when(userRepository.existsAnywhere("areeb@example.com")).thenReturn(false);
+        when(userRepository.existsAnywhere("1234567890")).thenReturn(false);
+
         when(passwordEncoder.encode("password123")).thenReturn("encodedPassword");
         when(userRepository.save(any(User.class))).thenReturn(user);
         when(jwtUtil.generateToken("areeb")).thenReturn("mocked-jwt-token");
