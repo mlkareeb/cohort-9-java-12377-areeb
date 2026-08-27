@@ -43,7 +43,7 @@ jobs:
         run: mvn -B verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.projectKey=mlkareeb_cohort-9-java-12377-areeb -f backend/pom.xml
 
       - name: SonarQube Scan (Frontend - JavaScript)
-        uses: SonarSource/sonarqube-scan-action@689fb3934b9aa95ebc5f8f119343ddd51542402 # v4.2.2
+        uses: SonarSource/sonarqube-scan-action@v5
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
