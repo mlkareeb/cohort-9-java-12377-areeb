@@ -345,10 +345,10 @@ npm test
 
 ## Code Quality — SonarQube
 
-Static analysis runs automatically via GitHub Actions on every push to `main` / `feature/*` branches and on pull requests, analyzing **both the Java backend and the JavaScript/React frontend**.
+Static analysis runs automatically via GitHub Actions on every push to `main` / `feature/*` branches and on pull requests, analyzing **both the Java backend and the JavaScript/React frontend in a single combined scan**.
 
-- Workflow: `.github/workflows/build.yml`
-- Configuration: `sonar-project.properties` (frontend scan) + Maven Sonar plugin (backend scan)
+- Workflow: `.github/workflows/build.yml` — first runs the backend test suite via Maven, then runs a single `sonarqube-scan-action` step from the repository root
+- Configuration: `sonar-project.properties` (repository root) — defines `sonar.sources` covering both `backend/src/main/java` and `frontend/src`, so both languages are analyzed together in one submission per run
 - Dashboard: [SonarCloud project](https://sonarcloud.io/project/overview?id=mlkareeb_cohort-9-java-12377-areeb)
 
 To run analysis locally, a `SONAR_TOKEN` must be available as an environment variable or GitHub Actions secret.
