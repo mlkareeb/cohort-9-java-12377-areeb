@@ -12,6 +12,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.access.AccessDeniedException;
 
 import java.util.Optional;
 
@@ -82,5 +83,25 @@ class ContactServiceTest {
         contactService.deleteContact(1L, 1L);
 
         verify(contactRepository, times(1)).delete(testContact);
+    }
+
+    @Test
+    void deleteContact_ThrowsAccessDenied_WhenNotOwner() {
+        // testContact belongs to testUser (id=1L); a different user (id=2L)
+        // must NOT be able to delete it
+        when(contactRepository.findById(1L)).thenReturn(Optional.of(testContact));
+
+        assertThrows(AccessDeniedException.class,
+                () -> contactService.deleteContact(2L, 1L));
+
+        verify(contactRepository, never()).delete(any(Contact.class));
+    }
+
+    @Test
+    void getContactById_ThrowsAccessDenied_WhenNotOwner() {
+        when(contactRepository.findById(1L)).thenReturn(Optional.of(testContact));
+
+        assertThrows(AccessDeniedException.class,
+                () -> contactService.getContactById(2L, 1L));
     }
 }
