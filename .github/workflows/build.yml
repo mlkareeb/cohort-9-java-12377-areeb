@@ -36,12 +36,11 @@ jobs:
           path: ~/.m2
           key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
           restore-keys: ${{ runner.os }}-m2
-      - name: Build and analyze
+      - name: Run backend tests
+        run: mvn -B verify -f backend/pom.xml
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@v5.0.0
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: >
-          mvn -B verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar
-          -Dsonar.projectKey=mlkareeb_cohort-9-java-12377-areeb
-          -Dsonar.sources=src/main/java,../frontend/src
-          -Dsonar.tests=src/test
-          -f backend/pom.xml
+        with:
+          projectBaseDir: .
