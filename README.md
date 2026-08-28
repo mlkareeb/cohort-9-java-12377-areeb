@@ -182,11 +182,11 @@ cohort-9-java-12377-areeb/
 |---|---|---|
 | id | Long | PK, auto-generated |
 | username | String | unique, not null |
-| email | String | unique, **nullable** |
-| phoneNumber | String | unique, **nullable** |
+| email | String | nullable |
+| phoneNumber | String | nullable |
 | password | String | not null (BCrypt hash) |
 
-> Exactly one of `email` / `phoneNumber` must be provided at registration (enforced in `AuthService`), but at the database level both are nullable since only one is guaranteed.
+> At least one of `email` / `phoneNumber` must be provided at registration; both are individually optional. Uniqueness across username, email, and phone number is enforced at the application layer (`AuthService`, via a single cross-field existence check), not as separate database-level unique constraints — this avoids a SQL Server quirk where multiple `NULL` values in a unique column are treated as duplicates, which would otherwise block a second user from registering phone-only (or email-only).
 
 ### `Contact`
 | Field | Type | Constraints |
@@ -226,8 +226,8 @@ Base URL: `http://localhost:8080/api`
 | POST | `/contacts` | Create a contact |
 | PUT | `/contacts/{id}` | Update a contact |
 | DELETE | `/contacts/{id}` | Delete a contact |
-| GET | `/contacts/export` | Export all contacts as JSON |
-| POST | `/contacts/import` | Import contacts from JSON |
+| GET | `/contacts/export` | Export all contacts as JSON (backend endpoint; not currently called by the frontend UI — see Known Limitations) |
+| POST | `/contacts/import` | Import contacts from JSON (backend endpoint; not currently called by the frontend UI — see Known Limitations) |
 
 All authenticated endpoints require an `Authorization: Bearer <token>` header, obtained from the login/register response.
 
@@ -347,7 +347,7 @@ npm test
 
 Static analysis runs automatically via GitHub Actions on every push to `main` / `feature/*` branches and on pull requests, analyzing **both the Java backend and the JavaScript/React frontend in a single combined scan**.
 
-- Workflow: `.github/workflows/build.yml` — first runs the backend test suite via Maven, then runs a single `sonarqube-scan-action` step from the repository root
+- Workflow: `.github/workflows/build.yml` — first runs the backend test suite via Maven, then runs a single `sonarqube-scan-action` step from the repository root (pinned to an immutable commit SHA, not a mutable version tag)
 - Configuration: `sonar-project.properties` (repository root) — defines `sonar.sources` covering both `backend/src/main/java` and `frontend/src`, so both languages are analyzed together in one submission per run
 - Dashboard: [SonarCloud project](https://sonarcloud.io/project/overview?id=mlkareeb_cohort-9-java-12377-areeb)
 
@@ -393,7 +393,7 @@ Requires the current password before allowing a reset.
 
 - A contact cannot hold two entries under the **same** label (e.g. two emails both labeled "Work") — the label acts as a unique key per contact. Distinct labels (e.g. "Work" and "Work 2") work without limit.
 - New-password-equals-old-password is accepted silently on password change (not rejected) — not a requirement violation, just a UX nicety not currently implemented.
-- Export/Import currently round-trips via a custom `.txt` format rather than a standard format like CSV/vCard.
+- The frontend's Export/Import buttons use a client-side, custom `.txt` format (built in `fileUtils.js`) — they do not call the backend's JSON `/contacts/export` and `/contacts/import` endpoints. Both mechanisms work independently; only the `.txt` flow is wired into the UI.
 - A contact's labeled phone number values are not format-validated (unlike the phone number supplied at registration, which is) — any string is accepted.
 
 ---

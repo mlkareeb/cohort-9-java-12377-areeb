@@ -43,34 +43,33 @@ public class AuthService {
             throw new IllegalArgumentException("Either email or phone number is required");
         }
 
-        // Cross-check all identity fields to prevent collisions across columns
+        // Normalize blank strings to null so we never persist "" for an optional identifier
+        String normalizedEmail = (request.getEmail() != null && !request.getEmail().isBlank())
+                ? request.getEmail().trim() : null;
+        String normalizedPhone = (request.getPhoneNumber() != null && !request.getPhoneNumber().isBlank())
+                ? request.getPhoneNumber().trim() : null;
+
         if (userRepository.existsAnywhere(request.getUsername())) {
             throw new UserAlreadyExistsException("Username already exists in the system");
         }
-        if (request.getEmail() != null && !request.getEmail().isBlank()
-                && userRepository.existsAnywhere(request.getEmail())) {
+        if (normalizedEmail != null && userRepository.existsAnywhere(normalizedEmail)) {
             throw new UserAlreadyExistsException("Email already exists in the system");
         }
-        if (request.getPhoneNumber() != null && !request.getPhoneNumber().isBlank()
-                && userRepository.existsAnywhere(request.getPhoneNumber())) {
+        if (normalizedPhone != null && userRepository.existsAnywhere(normalizedPhone)) {
             throw new UserAlreadyExistsException("Phone number already exists in the system");
         }
 
         User user = new User();
         user.setUsername(request.getUsername());
-        user.setEmail(request.getEmail());
+        user.setEmail(normalizedEmail);
         user.setPassword(passwordEncoder.encode(request.getPassword()));
-        user.setPhoneNumber(request.getPhoneNumber());
+        user.setPhoneNumber(normalizedPhone);
 
         try {
             userRepository.save(user);
         } catch (DataIntegrityViolationException e) {
-            Throwable rootCause = e.getRootCause();
-            String message = (rootCause != null && rootCause.getMessage() != null) ? rootCause.getMessage().toLowerCase() : "";
-            if (message.contains("username") || message.contains("email") || message.contains("phone") || message.contains("uk_")) {
-                throw new UserAlreadyExistsException("Username, email, or phone number already exists");
-            }
-            throw e;
+            log.error("Registration failed due to data integrity violation", e);
+            throw new UserAlreadyExistsException("Username, email, or phone number already exists");
         }
 
         String token = jwtUtil.generateToken(user.getUsername());
