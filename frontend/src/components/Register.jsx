@@ -28,15 +28,13 @@ function Register({ onRegisterSuccess }) {
                 password
             });
 
-            // Backend returns a token on successful registration too —
-            // store it and log the user straight in, so App.js can redirect
-            // to the Contact Management screen without a second login step.
-            if (data?.token) {
-                localStorage.setItem('token', data.token);
+            if (!data || !data.token) {
+                throw new Error('Registration response missing authentication token.');
             }
 
+            localStorage.setItem('token', data.token);
             setLoading(false);
-            onRegisterSuccess(data?.username || username);
+            onRegisterSuccess(data.username || username);
         } catch (err) {
             setLoading(false);
             setError(err.message || 'Registration failed. Please try again.');
