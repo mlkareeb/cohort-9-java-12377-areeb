@@ -266,9 +266,9 @@ The backend requires the following environment variables to be set before starti
 
 | Variable | Description | Example |
 |---|---|---|
-| `DB_USERNAME` | SQL Server login username | `mlkareeb` |
-| `DB_PASSWORD` | SQL Server login password | `contact123` |
-| `JWT_SECRET` | Secret key used to sign JWTs (Base64 string recommended) | `404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970` |
+| `DB_USERNAME` | SQL Server login username | `your_sql_server_username` |
+| `DB_PASSWORD` | SQL Server login password | `your_sql_server_password` |
+| `JWT_SECRET` | Secret key used to sign JWTs (Base64 string recommended) | `your_generated_jwt_secret` |
 | `SPRING_PROFILES_ACTIVE` | Active Spring profile | `dev` |
 
 ### Setting them (PowerShell example)
