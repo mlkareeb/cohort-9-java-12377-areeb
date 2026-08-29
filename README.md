@@ -186,7 +186,7 @@ cohort-9-java-12377-areeb/
 | phoneNumber | String | nullable |
 | password | String | not null (BCrypt hash) |
 
-> At least one of `email` / `phoneNumber` must be provided at registration; both are individually optional. Uniqueness across username, email, and phone number is enforced at the application layer (`AuthService`, via a single cross-field existence check), not as separate database-level unique constraints — this avoids a SQL Server quirk where multiple `NULL` values in a unique column are treated as duplicates, which would otherwise block a second user from registering phone-only (or email-only).
+> At least one of `email` / `phoneNumber` must be provided at registration; both are individually optional. Uniqueness is enforced at two layers: `AuthService` performs a cross-field existence check before insert (fast-fail with a clear error message), and the database itself enforces it via **filtered unique indexes** on `email` and `phoneNumber` (see [Database setup](#database-setup)) — these allow multiple `NULL` values while still rejecting real duplicates, working around a SQL Server quirk where a plain unique constraint treats multiple `NULL`s as duplicates of each other.
 
 ### `Contact`
 | Field | Type | Constraints |
@@ -285,6 +285,14 @@ $env:SPRING_PROFILES_ACTIVE="dev"
 
 ```sql
 CREATE DATABASE contact_manager;
+```
+
+3. After the backend has started at least once (so the `users` table exists), run the following once to add filtered unique indexes on `email` and `phoneNumber` — these can't be expressed via JPA annotations, so they're applied manually:
+
+```sql
+USE contact_manager;
+CREATE UNIQUE INDEX uk_users_email ON users(email) WHERE email IS NOT NULL;
+CREATE UNIQUE INDEX uk_users_phone_number ON users(phone_number) WHERE phone_number IS NOT NULL;
 ```
 
 ---
@@ -395,6 +403,7 @@ Requires the current password before allowing a reset.
 - New-password-equals-old-password is accepted silently on password change (not rejected) — not a requirement violation, just a UX nicety not currently implemented.
 - The frontend's Export/Import buttons use a client-side, custom `.txt` format (built in `fileUtils.js`) — they do not call the backend's JSON `/contacts/export` and `/contacts/import` endpoints. Both mechanisms work independently; only the `.txt` flow is wired into the UI.
 - A contact's labeled phone number values are not format-validated (unlike the phone number supplied at registration, which is) — any string is accepted.
+- The filtered unique indexes on `users.email` and `users.phoneNumber` are applied via a manual SQL script (see [Database setup](#database-setup)), not through Hibernate's `ddl-auto`, since JPA has no annotation for a partial/filtered index. A freshly cloned project needs that script run once after the first backend startup.
 
 ---
 
