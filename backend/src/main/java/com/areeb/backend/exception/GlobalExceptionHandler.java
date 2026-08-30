@@ -23,8 +23,9 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Global exception handler for controller-level exceptions, providing centralized
- * error handling across controllers and returning structured JSON responses.
+ * Exception handler restricted strictly to controller-level exceptions, returning
+ * structured JSON responses for controller errors. (Filter-level and security
+ * entry point exceptions are handled separately).
  */
 @RestControllerAdvice
 @SuppressWarnings("unused")
@@ -177,7 +178,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleGeneralException(Exception ex) {
-        log.error("Unhandled exception occurred: ", ex);
+        log.error("Unhandled controller exception occurred: ", ex);
 
         Map<String, Object> body = new HashMap<>();
         body.put(TIMESTAMP, LocalDateTime.now(ZoneId.of("UTC")));

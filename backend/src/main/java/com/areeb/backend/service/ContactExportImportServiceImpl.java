@@ -9,6 +9,8 @@ import com.areeb.backend.repository.UserRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.Validator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Set;
 
 @Service
 public class ContactExportImportServiceImpl implements ContactExportImportService {
@@ -27,12 +30,14 @@ public class ContactExportImportServiceImpl implements ContactExportImportServic
     private final ContactRepository contactRepository;
     private final UserRepository userRepository;
     private final ObjectMapper objectMapper;
+    private final Validator validator;
 
     @Autowired
-    public ContactExportImportServiceImpl(ContactRepository contactRepository, UserRepository userRepository) {
+    public ContactExportImportServiceImpl(ContactRepository contactRepository, UserRepository userRepository, Validator validator) {
         this.contactRepository = contactRepository;
         this.userRepository = userRepository;
         this.objectMapper = new ObjectMapper();
+        this.validator = validator;
     }
 
     @Override
@@ -83,11 +88,34 @@ public class ContactExportImportServiceImpl implements ContactExportImportServic
                 throw new IllegalArgumentException("Imported contact list cannot be null.");
             }
 
-            for (ContactDto dto : contactDtos) {
+            // Jackson deserialization does not trigger jakarta.validation constraints
+            // (those only fire via @Valid on a controller argument). This endpoint accepts
+            // a raw JSON string body, so without an explicit pass here, contacts with a
+            // null/blank firstName or lastName would reach the database, either creating
+            // invalid records or failing at the DB's nullable=false constraint mid-import.
+            // Validate every entry up front and reject the whole batch on any failure,
+            // rather than partially importing before hitting a bad row.
+            List<String> validationErrors = new ArrayList<>();
+            for (int i = 0; i < contactDtos.size(); i++) {
+                ContactDto dto = contactDtos.get(i);
                 if (dto == null) {
-                    throw new IllegalArgumentException("Contact entry cannot be null.");
+                    validationErrors.add("Entry " + (i + 1) + ": contact cannot be null");
+                    continue;
                 }
 
+                Set<ConstraintViolation<ContactDto>> violations = validator.validate(dto);
+                for (ConstraintViolation<ContactDto> violation : violations) {
+                    validationErrors.add("Entry " + (i + 1) + " (" + violation.getPropertyPath() + "): " + violation.getMessage());
+                }
+            }
+
+            if (!validationErrors.isEmpty()) {
+                String message = "Import failed due to invalid contact entries: " + String.join("; ", validationErrors);
+                log.warn(message);
+                throw new IllegalArgumentException(message);
+            }
+
+            for (ContactDto dto : contactDtos) {
                 Contact contact = new Contact();
                 contact.setFirstName(dto.getFirstName());
                 contact.setLastName(dto.getLastName());
