@@ -1,9 +1,6 @@
 import { createContactApi } from '../services/api';
 
 // --- Export Contacts to a JSON File ---
-// JSON is used instead of a pipe-delimited text format so that any character
-// in a contact's fields (including "|", ";", "=") is preserved exactly,
-// rather than being misinterpreted as a field/label separator on import.
 export const exportContactsToFile = (contacts, triggerToast) => {
     try {
         if (!contacts || contacts.length === 0) {
@@ -34,7 +31,7 @@ export const exportContactsToFile = (contacts, triggerToast) => {
     }
 };
 
-// --- Import Contacts from a JSON File (multi-label aware, with duplicate prevention) ---
+// --- Import Contacts from a JSON File (multi-label aware, with duplicate prevention & validation) ---
 export const importContactsFromFile = (e, currentContacts, setContacts, reloadContacts, triggerToast) => {
     const fileReader = new FileReader();
     if (e.target.files && e.target.files[0]) {
@@ -59,19 +56,20 @@ export const importContactsFromFile = (e, currentContacts, setContacts, reloadCo
                     return;
                 }
 
+                // Map and validate that required fields (like firstName/lastName) are not blank
                 const parsedContacts = parsedRaw
                     .filter(item => item && typeof item === 'object')
                     .map(item => ({
-                        firstName: item.firstName || 'Unknown',
-                        lastName: item.lastName || '',
-                        title: item.title || '',
+                        firstName: typeof item.firstName === 'string' ? item.firstName.trim() : '',
+                        lastName: typeof item.lastName === 'string' ? item.lastName.trim() : '',
+                        title: typeof item.title === 'string' ? item.title.trim() : '',
                         emails: item.emails && typeof item.emails === 'object' ? item.emails : {},
                         phoneNumbers: item.phoneNumbers && typeof item.phoneNumbers === 'object' ? item.phoneNumbers : {}
-                    }));
+                    }))
+                    .filter(item => item.firstName !== ''); // Reject if firstName is empty or blank
 
                 if (parsedContacts.length > 0) {
-                    // A contact is a "duplicate" if ANY of its emails matches ANY
-                    // existing contact's email (not just a single hardcoded label)
+                    // A contact is a "duplicate" if ANY of its emails matches ANY existing contact's email
                     const existingEmails = new Set();
                     currentContacts.forEach(c => {
                         Object.values(c.emails || {}).forEach(val => {
@@ -92,7 +90,7 @@ export const importContactsFromFile = (e, currentContacts, setContacts, reloadCo
                     });
 
                     if (uniqueNewContacts.length === 0) {
-                        triggerToast('No new contacts found (all were duplicates).');
+                        triggerToast('No valid or new contacts found (duplicates or missing required fields).');
                         return;
                     }
 
@@ -114,7 +112,7 @@ export const importContactsFromFile = (e, currentContacts, setContacts, reloadCo
                         triggerToast('Failed to save imported contacts to database.');
                     }
                 } else {
-                    triggerToast('No valid contacts found in file.');
+                    triggerToast('No valid contacts with a first name found in file.');
                 }
             } catch (error) {
                 triggerToast('Error reading uploaded file.');

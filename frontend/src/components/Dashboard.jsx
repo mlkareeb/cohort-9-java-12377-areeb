@@ -18,32 +18,25 @@ const nextEntryId = () => `entry-${entryIdCounter++}`;
 function Dashboard({ username, onLogout }) {
     const [activeTab, setActiveTab] = useState('contacts');
     const [viewMode, setViewMode] = useState('card');
-
     const [contacts, setContacts] = useState([]);
     const [totalPages, setTotalPages] = useState(1);
     const [totalContacts, setTotalContacts] = useState(0);
     const [searchQuery, setSearchQuery] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
     const contactsPerPage = 6;
-
     const [profile, setProfile] = useState(null);
-
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [showUpdateModal, setShowUpdateModal] = useState(false);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
     const [selectedContact, setSelectedContact] = useState(null);
-
     const [firstName, setFirstName] = useState('');
     const [lastName, setLastName] = useState('');
     const [title, setTitle] = useState('');
-
     const [emailEntries, setEmailEntries] = useState([{ id: nextEntryId(), label: 'Work', value: '' }]);
     const [phoneEntries, setPhoneEntries] = useState([{ id: nextEntryId(), label: 'Mobile', value: '' }]);
-
     const [currentPassword, setCurrentPassword] = useState('');
     const [newPassword, setNewPassword] = useState('');
-
     const [toastMessage, setToastMessage] = useState(null);
 
     // Tracks the most recently *started* loadContacts request so a slower,
@@ -93,8 +86,7 @@ function Dashboard({ username, onLogout }) {
     };
 
     // Loads one page of contacts from the backend, using the search endpoint when a query is present.
-    // Guards against stale responses: if a newer request has started by the time this one resolves,
-    // its response is discarded instead of overwriting fresher state.
+    // Guards against stale responses and clamps currentPage if it exceeds totalPages.
     const loadContacts = useCallback(async (page = currentPage, query = searchQuery) => {
         const requestId = ++latestRequestId.current;
         try {
@@ -102,14 +94,17 @@ function Dashboard({ username, onLogout }) {
             const data = query && query.trim() !== ''
                 ? await searchContactsApi(query.trim(), backendPage, contactsPerPage)
                 : await fetchContactsApi(backendPage, contactsPerPage);
-
             if (requestId !== latestRequestId.current) {
                 return; // a newer request superseded this one — discard this response
             }
-
+            const newTotalPages = data?.totalPages || 1;
+            if (page > newTotalPages) {
+                setCurrentPage(newTotalPages);
+                return;
+            }
             const list = Array.isArray(data?.content) ? data.content : [];
             setContacts(list);
-            setTotalPages(data?.totalPages || 1);
+            setTotalPages(newTotalPages);
             setTotalContacts(data?.totalElements ?? list.length);
         } catch (error) {
             if (requestId !== latestRequestId.current) {
@@ -124,7 +119,6 @@ function Dashboard({ username, onLogout }) {
     }, [currentPage, searchQuery]);
 
     // Reset to page 1 whenever the search changes, so we don't get stuck on a page that no longer exists.
-    // Skipping the load here (letting the effect below handle it) avoids firing a request with the stale page.
     useEffect(() => {
         setCurrentPage(1);
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -229,7 +223,6 @@ function Dashboard({ username, onLogout }) {
         let allContacts = [];
         let page = 0;
         let totalPagesCount = 1;
-
         do {
             const data = await fetchContactsApi(page, 100);
             const content = Array.isArray(data?.content) ? data.content : [];
@@ -237,7 +230,6 @@ function Dashboard({ username, onLogout }) {
             totalPagesCount = data?.totalPages || 1;
             page++;
         } while (page < totalPagesCount);
-
         return allContacts;
     };
 
@@ -270,19 +262,16 @@ function Dashboard({ username, onLogout }) {
 
     return (
         <div style={{ minHeight: '100vh', background: '#F8FAFC', color: '#1E293B', fontFamily: 'Inter, system-ui, sans-serif', display: 'flex', boxSizing: 'border-box' }}>
-
             {toastMessage && (
                 <div style={{ position: 'fixed', top: '24px', right: '24px', zIndex: 2000, background: '#FFFFFF', border: '1px solid #E2E8F0', padding: '12px 20px', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', fontSize: '14px', fontWeight: '500', color: '#0F172A', maxWidth: '400px', wordBreak: 'break-word' }}>
                     {toastMessage}
                 </div>
             )}
-
             <div style={{ width: '260px', background: '#FFFFFF', borderRight: '1px solid #E2E8F0', padding: '28px 20px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', boxSizing: 'border-box' }}>
                 <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '32px', paddingLeft: '8px' }}>
                         <h2 style={{ margin: '0', fontSize: '20px', fontWeight: '700', color: '#2563EB', letterSpacing: '-0.5px' }}>ContactHub</h2>
                     </div>
-
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                         <button
                             onClick={() => setActiveTab('contacts')}
@@ -298,7 +287,6 @@ function Dashboard({ username, onLogout }) {
                         </button>
                     </div>
                 </div>
-
                 <div style={{ background: '#F8FAFC', padding: '12px 16px', borderRadius: '10px', border: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <div style={{ width: '32px', height: '32px', background: '#2563EB', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '700', fontSize: '13px', color: '#FFFFFF' }}>
@@ -312,9 +300,7 @@ function Dashboard({ username, onLogout }) {
                     <button onClick={onLogout} title="Sign Out" style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#EF4444', fontSize: '13px', fontWeight: '600' }}>Logout</button>
                 </div>
             </div>
-
             <div style={{ flex: '1', display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
-
                 <div style={{ height: '72px', background: '#FFFFFF', borderBottom: '1px solid #E2E8F0', padding: '0 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxSizing: 'border-box' }}>
                     <div style={{ position: 'relative', width: '340px' }}>
                         <input
@@ -325,7 +311,6 @@ function Dashboard({ username, onLogout }) {
                             style={{ width: '100%', padding: '9px 14px', borderRadius: '8px', background: '#F8FAFC', border: '1px solid #CBD5E1', color: '#0F172A', outline: 'none', fontSize: '13px', boxSizing: 'border-box' }}
                         />
                     </div>
-
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                         <button
                             onClick={() => { resetContactForm(); setShowCreateModal(true); }}
@@ -335,9 +320,7 @@ function Dashboard({ username, onLogout }) {
                         </button>
                     </div>
                 </div>
-
                 <div style={{ flex: '1', padding: '32px', overflowY: 'auto', boxSizing: 'border-box' }}>
-
                     {activeTab === 'contacts' ? (
                         <div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
@@ -345,7 +328,6 @@ function Dashboard({ username, onLogout }) {
                                     <h1 style={{ margin: '0 0 4px 0', fontSize: '22px', fontWeight: '700', color: '#0F172A' }}>Contacts Directory</h1>
                                     <p style={{ margin: '0', color: '#64748B', fontSize: '13px' }}>Manage your professional and personal network.</p>
                                 </div>
-
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                     <button
                                         onClick={handleExportContacts}
@@ -353,7 +335,6 @@ function Dashboard({ username, onLogout }) {
                                     >
                                         Download
                                     </button>
-
                                     <input
                                         type="file"
                                         id="import-file-input"
@@ -361,14 +342,12 @@ function Dashboard({ username, onLogout }) {
                                         style={{ display: 'none' }}
                                         onChange={handleImportContacts}
                                     />
-
                                     <button
                                         onClick={() => document.getElementById('import-file-input').click()}
                                         style={{ padding: '6px 12px', background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: '6px', color: '#0F172A', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}
                                     >
                                         Upload
                                     </button>
-
                                     <div style={{ display: 'flex', background: '#E2E8F0', padding: '3px', borderRadius: '8px', marginLeft: '8px' }}>
                                         <button
                                             onClick={() => setViewMode('card')}
@@ -385,7 +364,6 @@ function Dashboard({ username, onLogout }) {
                                     </div>
                                 </div>
                             </div>
-
                             {viewMode === 'card' ? (
                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px', marginBottom: '28px' }}>
                                     {safeContacts.map(contact => (
@@ -430,7 +408,6 @@ function Dashboard({ username, onLogout }) {
                                     </table>
                                 </div>
                             )}
-
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#FFFFFF', border: '1px solid #E2E8F0', padding: '12px 20px', borderRadius: '10px', boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
                                 <span style={{ fontSize: '13px', color: '#64748B' }}>
                                     Page {currentPage} of {totalPages} &middot; {totalContacts} total contacts
@@ -452,7 +429,6 @@ function Dashboard({ username, onLogout }) {
                                     </button>
                                 </div>
                             </div>
-
                         </div>
                     ) : (
                         <UserProfile
@@ -464,7 +440,6 @@ function Dashboard({ username, onLogout }) {
                     )}
                 </div>
             </div>
-
             {(showCreateModal || showUpdateModal) && (
                 <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15, 23, 42, 0.4)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
                     <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', padding: '32px', borderRadius: '12px', width: '100%', maxWidth: '440px', maxHeight: '85vh', overflowY: 'auto', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', boxSizing: 'border-box' }}>
@@ -473,7 +448,6 @@ function Dashboard({ username, onLogout }) {
                             <div style={{ marginBottom: '12px' }}><label style={{ fontSize: '12px', fontWeight: '500', color: '#64748B' }}>First Name</label><input type="text" value={firstName} onChange={e => setFirstName(e.target.value)} required style={{ width: '100%', padding: '9px 12px', borderRadius: '6px', background: '#F8FAFC', border: '1px solid #CBD5E1', color: '#0F172A', boxSizing: 'border-box', marginTop: '4px' }} /></div>
                             <div style={{ marginBottom: '12px' }}><label style={{ fontSize: '12px', fontWeight: '500', color: '#64748B' }}>Last Name</label><input type="text" value={lastName} onChange={e => setLastName(e.target.value)} required style={{ width: '100%', padding: '9px 12px', borderRadius: '6px', background: '#F8FAFC', border: '1px solid #CBD5E1', color: '#0F172A', boxSizing: 'border-box', marginTop: '4px' }} /></div>
                             <div style={{ marginBottom: '16px' }}><label style={{ fontSize: '12px', fontWeight: '500', color: '#64748B' }}>Title / Role</label><input type="text" value={title} onChange={e => setTitle(e.target.value)} required style={{ width: '100%', padding: '9px 12px', borderRadius: '6px', background: '#F8FAFC', border: '1px solid #CBD5E1', color: '#0F172A', boxSizing: 'border-box', marginTop: '4px' }} /></div>
-
                             <div style={{ marginBottom: '16px' }}>
                                 <label style={{ fontSize: '12px', fontWeight: '500', color: '#64748B' }}>Email Addresses</label>
                                 {emailEntries.map((entry) => (
@@ -499,7 +473,6 @@ function Dashboard({ username, onLogout }) {
                                 ))}
                                 <button type="button" onClick={addEmailEntry} style={{ marginTop: '8px', background: 'transparent', border: 'none', color: '#2563EB', fontSize: '12px', fontWeight: '600', cursor: 'pointer', padding: 0 }}>+ Add another email</button>
                             </div>
-
                             <div style={{ marginBottom: '24px' }}>
                                 <label style={{ fontSize: '12px', fontWeight: '500', color: '#64748B' }}>Phone Numbers</label>
                                 {phoneEntries.map((entry) => (
@@ -525,7 +498,6 @@ function Dashboard({ username, onLogout }) {
                                 ))}
                                 <button type="button" onClick={addPhoneEntry} style={{ marginTop: '8px', background: 'transparent', border: 'none', color: '#2563EB', fontSize: '12px', fontWeight: '600', cursor: 'pointer', padding: 0 }}>+ Add another phone</button>
                             </div>
-
                             <div style={{ display: 'flex', gap: '10px' }}>
                                 <button type="submit" style={{ flex: '1', padding: '10px', background: '#2563EB', color: '#FFFFFF', border: 'none', borderRadius: '6px', fontWeight: '600', cursor: 'pointer' }}>Save Contact</button>
                                 <button type="button" onClick={() => { setShowCreateModal(false); setShowUpdateModal(false); resetContactForm(); }} style={{ padding: '10px 16px', background: '#F8FAFC', color: '#64748B', border: '1px solid #CBD5E1', borderRadius: '6px', fontWeight: '600', cursor: 'pointer' }}>Cancel</button>
@@ -534,7 +506,6 @@ function Dashboard({ username, onLogout }) {
                     </div>
                 </div>
             )}
-
             {showDeleteModal && (
                 <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15, 23, 42, 0.4)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
                     <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', padding: '28px', borderRadius: '12px', width: '100%', maxWidth: '380px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', boxSizing: 'border-box', textAlign: 'center' }}>
@@ -547,7 +518,6 @@ function Dashboard({ username, onLogout }) {
                     </div>
                 </div>
             )}
-
             {showChangePasswordModal && (
                 <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15, 23, 42, 0.4)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
                     <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', padding: '32px', borderRadius: '12px', width: '100%', maxWidth: '400px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', boxSizing: 'border-box' }}>
@@ -563,7 +533,6 @@ function Dashboard({ username, onLogout }) {
                     </div>
                 </div>
             )}
-
         </div>
     );
 }

@@ -37,6 +37,7 @@ function App() {
                 <div style={{ display: 'inline-flex', background: '#e2e8f0', padding: '4px', borderRadius: '8px' }}>
                     <button
                         onClick={() => setIsLogin(true)}
+                        aria-label="Switch to Sign In"
                         style={{
                             padding: '8px 24px',
                             borderRadius: '6px',
@@ -54,6 +55,7 @@ function App() {
                     </button>
                     <button
                         onClick={() => setIsLogin(false)}
+                        aria-label="Switch to Sign Up"
                         style={{
                             padding: '8px 24px',
                             borderRadius: '6px',

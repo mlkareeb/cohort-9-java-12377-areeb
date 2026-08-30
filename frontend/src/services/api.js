@@ -2,10 +2,10 @@
 
 const BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8080/api';
 
-// Guards against sending the JWT bearer token in plaintext over a non-loopback
+// Guards against sending sensitive credentials/tokens in plaintext over a non-loopback
 // HTTP origin. Localhost/127.0.0.1 over http:// is fine for local dev; any other
 // http:// host (e.g. a misconfigured REACT_APP_API_BASE_URL pointing at a real
-// server without TLS) would leak the token to anyone on the network path.
+// server without TLS) would leak credentials to anyone on the network path.
 const isSecureOrLoopback = (() => {
     try {
         const { protocol, hostname } = new URL(BASE_URL);
@@ -18,15 +18,21 @@ const isSecureOrLoopback = (() => {
     }
 })();
 
-const getHeaders = () => {
-    const token = localStorage.getItem('token');
-    const isAuthed = Boolean(token);
-
-    if (isAuthed && !isSecureOrLoopback) {
+const ensureSecureOrigin = () => {
+    if (!isSecureOrLoopback) {
         throw new Error(
             'Refusing to send credentials: API base URL is not HTTPS or localhost. ' +
             'Check REACT_APP_API_BASE_URL.'
         );
+    }
+};
+
+const getHeaders = () => {
+    const token = localStorage.getItem('token');
+    const isAuthed = Boolean(token);
+
+    if (isAuthed) {
+        ensureSecureOrigin();
     }
 
     return {
@@ -55,6 +61,8 @@ const handleApiError = async (response, defaultMessage) => {
 
 // --- Auth API ---
 export const loginApi = async (usernameOrEmailOrPhone, password) => {
+    ensureSecureOrigin();
+
     const response = await fetch(`${BASE_URL}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -147,6 +155,8 @@ export const changePasswordApi = async (passwordData) => {
 
 // --- Register API ---
 export const registerApi = async (userData) => {
+    ensureSecureOrigin();
+
     const response = await fetch(`${BASE_URL}/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

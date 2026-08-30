@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.CredentialsExpiredException;
 import org.springframework.security.authentication.DisabledException;
@@ -21,6 +22,10 @@ import java.time.ZoneId;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * Global exception handler for controller-level exceptions, providing centralized
+ * error handling across controllers and returning structured JSON responses.
+ */
 @RestControllerAdvice
 @SuppressWarnings("unused")
 public class GlobalExceptionHandler {
@@ -142,7 +147,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Map<String, Object>> handleValidationException(MethodArgumentNotValidException ex) {
-        log.error("Validation failed: {}", ex.getMessage());
+        log.error("Validation failed for request");
 
         Map<String, String> fieldErrors = new HashMap<>();
         ex.getBindingResult().getFieldErrors().forEach(error ->
@@ -154,6 +159,18 @@ public class GlobalExceptionHandler {
         body.put(MESSAGE, "Validation failed");
         body.put(STATUS, HttpStatus.BAD_REQUEST.value());
         body.put("errors", fieldErrors);
+
+        return new ResponseEntity<>(body, HttpStatus.BAD_REQUEST);
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<Map<String, Object>> handleHttpMessageNotReadable(HttpMessageNotReadableException ex) {
+        log.error("Malformed JSON or unreadable request body");
+
+        Map<String, Object> body = new HashMap<>();
+        body.put(TIMESTAMP, LocalDateTime.now(ZoneId.of("UTC")));
+        body.put(MESSAGE, "Malformed JSON request or unreadable request body");
+        body.put(STATUS, HttpStatus.BAD_REQUEST.value());
 
         return new ResponseEntity<>(body, HttpStatus.BAD_REQUEST);
     }
