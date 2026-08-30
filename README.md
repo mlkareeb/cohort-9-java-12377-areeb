@@ -42,7 +42,7 @@ Every contact is scoped to the logged-in user — no user can view, edit, or del
 ## System Architecture
 
 ```
-┌─────────────────────┐         HTTPS / JSON          ┌──────────────────────┐
+┌─────────────────────┐          HTTP / JSON          ┌──────────────────────┐
 │   React Frontend      │  ─────────────────────────▶  │   Spring Boot Backend  │
 │   (localhost:3000)    │  ◀─────────────────────────  │   (localhost:8080)     │
 │                        │        JWT Bearer Token       │                        │
@@ -62,6 +62,8 @@ Every contact is scoped to the logged-in user — no user can view, edit, or del
 3. Spring Security's `SecurityContext` is populated, allowing the request to proceed to the controller
 4. Controller delegates to the service layer, which enforces per-user ownership checks before touching the database
 5. `GlobalExceptionHandler` catches any exception thrown anywhere in this chain and converts it into a structured JSON error response
+
+> **Note:** Local development runs over plain HTTP, since both the frontend (`localhost:3000`) and backend (`localhost:8080`) run on the developer's own machine. A production deployment should run behind HTTPS end-to-end; the frontend's API client (`src/services/api.js`) refuses to attach the bearer token to requests if `REACT_APP_API_BASE_URL` is set to a non-loopback `http://` origin, to avoid transmitting the token in plaintext over an untrusted network.
 
 ---
 
@@ -116,7 +118,7 @@ Every contact is scoped to the logged-in user — no user can view, edit, or del
   - Title
   - **Multiple labeled email addresses** (e.g. Work, Personal — user-defined labels)
   - **Multiple labeled phone numbers** (e.g. Mobile, Home — user-defined labels)
-- Export all contacts to a downloadable `.txt` file
+- Export all contacts to a downloadable `.json` file
 - Import contacts from a previously exported file, with duplicate detection by email
 
 ### 🛡️ Error Handling & Logging
@@ -240,6 +242,7 @@ All authenticated endpoints require an `Authorization: Bearer <token>` header, o
 - **Ownership enforcement**: every contact operation checks `contact.getUser().getId().equals(userId)` before allowing access, returning `403 Forbidden` on mismatch
 - **CORS**: restricted to `localhost:3000` / `localhost:5173` (React dev servers)
 - **Validation**: all request DTOs validated via Jakarta Bean Validation before reaching business logic
+- **Transport safety**: the frontend API client refuses to attach the JWT bearer token to a request if the configured API base URL is a non-loopback `http://` origin, preventing accidental plaintext transmission of credentials if misconfigured for a real deployment
 
 ---
 
@@ -353,7 +356,7 @@ npm test
 
 ## Code Quality — SonarQube
 
-Static analysis runs automatically via GitHub Actions on every push to `main` / `feature/*` branches and on pull requests, analyzing **both the Java backend and the JavaScript/React frontend in a single combined scan**.
+Static analysis runs automatically via GitHub Actions on every push to `main` or `feature/user-profile`, and on pull requests, analyzing **both the Java backend and the JavaScript/React frontend in a single combined scan**.
 
 - Workflow: `.github/workflows/build.yml` — first runs the backend test suite via Maven, then runs a single `sonarqube-scan-action` step from the repository root (pinned to an immutable commit SHA, not a mutable version tag)
 - Configuration: `sonar-project.properties` (repository root) — defines `sonar.sources` covering both `backend/src/main/java` and `frontend/src`, so both languages are analyzed together in one submission per run
@@ -401,7 +404,7 @@ Requires the current password before allowing a reset.
 
 - A contact cannot hold two entries under the **same** label (e.g. two emails both labeled "Work") — the label acts as a unique key per contact. Distinct labels (e.g. "Work" and "Work 2") work without limit.
 - New-password-equals-old-password is accepted silently on password change (not rejected) — not a requirement violation, just a UX nicety not currently implemented.
-- The frontend's Export/Import buttons use a client-side, custom `.txt` format (built in `fileUtils.js`) — they do not call the backend's JSON `/contacts/export` and `/contacts/import` endpoints. Both mechanisms work independently; only the `.txt` flow is wired into the UI.
+- The frontend's Export/Import buttons use a client-side `.json` format (built in `fileUtils.js`) — they do not call the backend's `/contacts/export` and `/contacts/import` endpoints. Both mechanisms work independently; only the client-side JSON flow is wired into the UI.
 - A contact's labeled phone number values are not format-validated (unlike the phone number supplied at registration, which is) — any string is accepted.
 - The filtered unique indexes on `users.email` and `users.phoneNumber` are applied via a manual SQL script (see [Database setup](#database-setup)), not through Hibernate's `ddl-auto`, since JPA has no annotation for a partial/filtered index. A freshly cloned project needs that script run once after the first backend startup.
 

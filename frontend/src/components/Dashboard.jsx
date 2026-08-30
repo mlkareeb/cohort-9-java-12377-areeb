@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import UserProfile from './UserProfile';
 import ContactCard from './ContactCard';
 import { exportContactsToFile, importContactsFromFile } from './fileUtils';
@@ -38,9 +38,6 @@ function Dashboard({ username, onLogout }) {
     const [lastName, setLastName] = useState('');
     const [title, setTitle] = useState('');
 
-    // Emails/phones are now lists of { id, label, value } so a contact
-    // can hold multiple labeled entries (Work, Personal, Home, etc.)
-    // instead of a single hardcoded "Work" email / "Mobile" phone.
     const [emailEntries, setEmailEntries] = useState([{ id: nextEntryId(), label: 'Work', value: '' }]);
     const [phoneEntries, setPhoneEntries] = useState([{ id: nextEntryId(), label: 'Mobile', value: '' }]);
 
@@ -48,6 +45,10 @@ function Dashboard({ username, onLogout }) {
     const [newPassword, setNewPassword] = useState('');
 
     const [toastMessage, setToastMessage] = useState(null);
+
+    // Tracks the most recently *started* loadContacts request so a slower,
+    // superseded request can detect it's stale and skip applying its response.
+    const latestRequestId = useRef(0);
 
     const triggerToast = (msg) => {
         setToastMessage(msg);
@@ -72,8 +73,6 @@ function Dashboard({ username, onLogout }) {
     const updatePhoneEntry = (id, field, val) =>
         setPhoneEntries(prev => prev.map(p => (p.id === id ? { ...p, [field]: val } : p)));
 
-    // Converts the {id, label, value} entries back into the labeled map
-    // shape the backend expects, e.g. { Work: "a@b.com", Personal: "c@d.com" }
     const entriesToMap = (entries) => {
         const map = {};
         entries.forEach(({ label, value }) => {
@@ -86,7 +85,6 @@ function Dashboard({ username, onLogout }) {
         return map;
     };
 
-    // Converts a labeled map from the backend into editable {id, label, value} entries
     const mapToEntries = (map, fallbackLabel) => {
         if (map && typeof map === 'object' && !Array.isArray(map) && Object.keys(map).length > 0) {
             return Object.entries(map).map(([label, value]) => ({ id: nextEntryId(), label, value }));
@@ -94,19 +92,29 @@ function Dashboard({ username, onLogout }) {
         return [{ id: nextEntryId(), label: fallbackLabel, value: '' }];
     };
 
-    // Loads one page of contacts from the backend, using the search endpoint when a query is present
+    // Loads one page of contacts from the backend, using the search endpoint when a query is present.
+    // Guards against stale responses: if a newer request has started by the time this one resolves,
+    // its response is discarded instead of overwriting fresher state.
     const loadContacts = useCallback(async (page = currentPage, query = searchQuery) => {
+        const requestId = ++latestRequestId.current;
         try {
             const backendPage = page - 1; // backend pages are 0-indexed
             const data = query && query.trim() !== ''
                 ? await searchContactsApi(query.trim(), backendPage, contactsPerPage)
                 : await fetchContactsApi(backendPage, contactsPerPage);
 
+            if (requestId !== latestRequestId.current) {
+                return; // a newer request superseded this one — discard this response
+            }
+
             const list = Array.isArray(data?.content) ? data.content : [];
             setContacts(list);
             setTotalPages(data?.totalPages || 1);
             setTotalContacts(data?.totalElements ?? list.length);
         } catch (error) {
+            if (requestId !== latestRequestId.current) {
+                return;
+            }
             triggerToast('Failed to load contacts from database.');
             setContacts([]);
             setTotalPages(1);
@@ -115,7 +123,8 @@ function Dashboard({ username, onLogout }) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [currentPage, searchQuery]);
 
-    // Reset to page 1 whenever the search changes, so we don't get stuck on a page that no longer exists
+    // Reset to page 1 whenever the search changes, so we don't get stuck on a page that no longer exists.
+    // Skipping the load here (letting the effect below handle it) avoids firing a request with the stale page.
     useEffect(() => {
         setCurrentPage(1);
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -215,22 +224,35 @@ function Dashboard({ username, onLogout }) {
         }
     };
 
-    // Export needs the FULL contact list, not just the current page, so fetch it fresh
+    // Helper to fetch all pages sequentially to avoid truncation past 1,000 records
+    const fetchAllContacts = async () => {
+        let allContacts = [];
+        let page = 0;
+        let totalPagesCount = 1;
+
+        do {
+            const data = await fetchContactsApi(page, 100);
+            const content = Array.isArray(data?.content) ? data.content : [];
+            allContacts = [...allContacts, ...content];
+            totalPagesCount = data?.totalPages || 1;
+            page++;
+        } while (page < totalPagesCount);
+
+        return allContacts;
+    };
+
     const handleExportContacts = async () => {
         try {
-            const fullData = await fetchContactsApi(0, 1000);
-            const fullList = Array.isArray(fullData?.content) ? fullData.content : [];
+            const fullList = await fetchAllContacts();
             exportContactsToFile(fullList, triggerToast);
         } catch (error) {
             triggerToast('Failed to export contacts.');
         }
     };
 
-    // Import dedup also needs the FULL contact list to avoid re-adding contacts that live on other pages
     const handleImportContacts = async (e) => {
         try {
-            const fullData = await fetchContactsApi(0, 1000);
-            const fullList = Array.isArray(fullData?.content) ? fullData.content : [];
+            const fullList = await fetchAllContacts();
             importContactsFromFile(e, fullList, setContacts, () => loadContacts(currentPage, searchQuery), triggerToast);
         } catch (error) {
             triggerToast('Failed to read existing contacts before import.');
@@ -335,7 +357,7 @@ function Dashboard({ username, onLogout }) {
                                     <input
                                         type="file"
                                         id="import-file-input"
-                                        accept=".txt"
+                                        accept=".json"
                                         style={{ display: 'none' }}
                                         onChange={handleImportContacts}
                                     />
@@ -505,10 +527,23 @@ function Dashboard({ username, onLogout }) {
                             </div>
 
                             <div style={{ display: 'flex', gap: '10px' }}>
-                                <button type="submit" style={{ flex: '1', padding: '10px', background: '#2563EB', color: '#FFFFFF', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer' }}>Save Contact</button>
-                                <button type="button" onClick={() => { setShowCreateModal(false); setShowUpdateModal(false); resetContactForm(); }} style={{ flex: '1', padding: '10px', background: '#F1F5F9', color: '#0F172A', border: '1px solid #CBD5E1', borderRadius: '8px', fontWeight: '600', cursor: 'pointer' }}>Cancel</button>
+                                <button type="submit" style={{ flex: '1', padding: '10px', background: '#2563EB', color: '#FFFFFF', border: 'none', borderRadius: '6px', fontWeight: '600', cursor: 'pointer' }}>Save Contact</button>
+                                <button type="button" onClick={() => { setShowCreateModal(false); setShowUpdateModal(false); resetContactForm(); }} style={{ padding: '10px 16px', background: '#F8FAFC', color: '#64748B', border: '1px solid #CBD5E1', borderRadius: '6px', fontWeight: '600', cursor: 'pointer' }}>Cancel</button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {showDeleteModal && (
+                <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15, 23, 42, 0.4)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
+                    <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', padding: '28px', borderRadius: '12px', width: '100%', maxWidth: '380px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', boxSizing: 'border-box', textAlign: 'center' }}>
+                        <h3 style={{ margin: '0 0 10px 0', fontSize: '18px', color: '#0F172A', fontWeight: '700' }}>Delete Contact</h3>
+                        <p style={{ margin: '0 0 20px 0', fontSize: '13px', color: '#64748B' }}>Are you sure you want to remove <strong style={{ color: '#0F172A' }}>{selectedContact?.firstName} {selectedContact?.lastName}</strong>? This action cannot be undone.</p>
+                        <div style={{ display: 'flex', gap: '10px' }}>
+                            <button onClick={handleDeleteConfirm} style={{ flex: '1', padding: '10px', background: '#DC2626', color: '#FFFFFF', border: 'none', borderRadius: '6px', fontWeight: '600', cursor: 'pointer' }}>Delete</button>
+                            <button onClick={() => { setShowDeleteModal(false); setSelectedContact(null); }} style={{ flex: '1', padding: '10px', background: '#F8FAFC', color: '#64748B', border: '1px solid #CBD5E1', borderRadius: '6px', fontWeight: '600', cursor: 'pointer' }}>Cancel</button>
+                        </div>
                     </div>
                 </div>
             )}
@@ -518,34 +553,13 @@ function Dashboard({ username, onLogout }) {
                     <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', padding: '32px', borderRadius: '12px', width: '100%', maxWidth: '400px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', boxSizing: 'border-box' }}>
                         <h3 style={{ margin: '0 0 20px 0', fontSize: '18px', color: '#0F172A', fontWeight: '700' }}>Change Password</h3>
                         <form onSubmit={handlePasswordReset}>
-                            <div style={{ marginBottom: '12px' }}>
-                                <label style={{ fontSize: '12px', fontWeight: '500', color: '#64748B' }}>Current Password</label>
-                                <input type="password" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} required style={{ width: '100%', padding: '9px 12px', borderRadius: '6px', background: '#F8FAFC', border: '1px solid #CBD5E1', color: '#0F172A', boxSizing: 'border-box', marginTop: '4px' }} />
-                            </div>
-                            <div style={{ marginBottom: '24px' }}>
-                                <label style={{ fontSize: '12px', fontWeight: '500', color: '#64748B' }}>New Password</label>
-                                <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} required style={{ width: '100%', padding: '9px 12px', borderRadius: '6px', background: '#F8FAFC', border: '1px solid #CBD5E1', color: '#0F172A', boxSizing: 'border-box', marginTop: '4px' }} />
-                            </div>
-
+                            <div style={{ marginBottom: '12px' }}><label style={{ fontSize: '12px', fontWeight: '500', color: '#64748B' }}>Current Password</label><input type="password" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} required style={{ width: '100%', padding: '9px 12px', borderRadius: '6px', background: '#F8FAFC', border: '1px solid #CBD5E1', color: '#0F172A', boxSizing: 'border-box', marginTop: '4px' }} /></div>
+                            <div style={{ marginBottom: '24px' }}><label style={{ fontSize: '12px', fontWeight: '500', color: '#64748B' }}>New Password</label><input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} required style={{ width: '100%', padding: '9px 12px', borderRadius: '6px', background: '#F8FAFC', border: '1px solid #CBD5E1', color: '#0F172A', boxSizing: 'border-box', marginTop: '4px' }} /></div>
                             <div style={{ display: 'flex', gap: '10px' }}>
-                                <button type="submit" style={{ flex: '1', padding: '10px', background: '#2563EB', color: '#FFFFFF', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer' }}>Reset</button>
-                                <button type="button" onClick={() => { setShowChangePasswordModal(false); setCurrentPassword(''); setNewPassword(''); }} style={{ flex: '1', padding: '10px', background: '#F1F5F9', color: '#0F172A', border: '1px solid #CBD5E1', borderRadius: '8px', fontWeight: '600', cursor: 'pointer' }}>Cancel</button>
+                                <button type="submit" style={{ flex: '1', padding: '10px', background: '#2563EB', color: '#FFFFFF', border: 'none', borderRadius: '6px', fontWeight: '600', cursor: 'pointer' }}>Update Password</button>
+                                <button type="button" onClick={() => { setShowChangePasswordModal(false); setCurrentPassword(''); setNewPassword(''); }} style={{ padding: '10px 16px', background: '#F8FAFC', color: '#64748B', border: '1px solid #CBD5E1', borderRadius: '6px', fontWeight: '600', cursor: 'pointer' }}>Cancel</button>
                             </div>
                         </form>
-                    </div>
-                </div>
-            )}
-
-            {showDeleteModal && (
-                <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15, 23, 42, 0.4)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
-                    <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', padding: '32px', borderRadius: '12px', width: '100%', maxWidth: '360px', textAlign: 'center', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', boxSizing: 'border-box' }}>
-                        <h3 style={{ margin: '0 0 8px 0', fontSize: '18px', color: '#0F172A', fontWeight: '700' }}>Confirm Deletion</h3>
-                        <p style={{ color: '#64748B', fontSize: '13px', marginBottom: '24px' }}>Are you sure you want to delete {selectedContact?.firstName}? This action cannot be undone.</p>
-
-                        <div style={{ display: 'flex', gap: '10px' }}>
-                            <button onClick={handleDeleteConfirm} style={{ flex: '1', padding: '10px', background: '#DC2626', color: '#FFFFFF', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer' }}>Delete</button>
-                            <button onClick={() => setShowDeleteModal(false)} style={{ flex: '1', padding: '10px', background: '#F1F5F9', color: '#0F172A', border: '1px solid #CBD5E1', borderRadius: '8px', fontWeight: '600', cursor: 'pointer' }}>Cancel</button>
-                        </div>
                     </div>
                 </div>
             )}

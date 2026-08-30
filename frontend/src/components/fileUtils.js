@@ -1,30 +1,9 @@
 import { createContactApi } from '../services/api';
 
-// Converts a labeled map (e.g. { Work: "a@b.com", Personal: "c@d.com" })
-// into "Work=a@b.com;Personal=c@d.com" for storage in the .txt file
-const mapToInline = (map) => {
-    if (!map || typeof map !== 'object') return '';
-    return Object.entries(map)
-        .filter(([, value]) => value)
-        .map(([label, value]) => `${label}=${value}`)
-        .join(';');
-};
-
-// Reverses mapToInline: "Work=a@b.com;Personal=c@d.com" -> { Work: "a@b.com", Personal: "c@d.com" }
-const inlineToMap = (inline) => {
-    const map = {};
-    if (!inline) return map;
-    inline.split(';').forEach(pair => {
-        const [label, ...rest] = pair.split('=');
-        const value = rest.join('=').trim();
-        if (label && value) {
-            map[label.trim()] = value;
-        }
-    });
-    return map;
-};
-
-// --- Export Contacts to TXT File ---
+// --- Export Contacts to a JSON File ---
+// JSON is used instead of a pipe-delimited text format so that any character
+// in a contact's fields (including "|", ";", "=") is preserved exactly,
+// rather than being misinterpreted as a field/label separator on import.
 export const exportContactsToFile = (contacts, triggerToast) => {
     try {
         if (!contacts || contacts.length === 0) {
@@ -32,17 +11,20 @@ export const exportContactsToFile = (contacts, triggerToast) => {
             return;
         }
 
-        const fileContent = contacts.map(c => {
-            const emailsInline = mapToInline(c.emails) || 'N/A';
-            const phonesInline = mapToInline(c.phoneNumbers) || 'N/A';
+        const exportable = contacts.map(c => ({
+            firstName: c.firstName || '',
+            lastName: c.lastName || '',
+            title: c.title || '',
+            emails: c.emails && typeof c.emails === 'object' ? c.emails : {},
+            phoneNumbers: c.phoneNumbers && typeof c.phoneNumbers === 'object' ? c.phoneNumbers : {}
+        }));
 
-            return `Name: ${c.firstName || ''} ${c.lastName || ''} | Title: ${c.title || ''} | Emails: ${emailsInline} | Phones: ${phonesInline}`;
-        }).join('\n');
+        const fileContent = JSON.stringify(exportable, null, 2);
 
-        const blob = new Blob([fileContent], { type: 'text/plain;charset=utf-8;' });
+        const blob = new Blob([fileContent], { type: 'application/json;charset=utf-8;' });
         const downloadAnchor = document.createElement('a');
         downloadAnchor.href = URL.createObjectURL(blob);
-        downloadAnchor.setAttribute("download", "contacts_export.txt");
+        downloadAnchor.setAttribute("download", "contacts_export.json");
         document.body.appendChild(downloadAnchor);
         downloadAnchor.click();
         downloadAnchor.remove();
@@ -52,40 +34,40 @@ export const exportContactsToFile = (contacts, triggerToast) => {
     }
 };
 
-// --- Import Contacts from TXT File (multi-label aware, with duplicate prevention) ---
+// --- Import Contacts from a JSON File (multi-label aware, with duplicate prevention) ---
 export const importContactsFromFile = (e, currentContacts, setContacts, reloadContacts, triggerToast) => {
     const fileReader = new FileReader();
     if (e.target.files && e.target.files[0]) {
         fileReader.onerror = () => {
-            triggerToast('Error reading uploaded text file.');
+            triggerToast('Error reading uploaded file.');
         };
 
         fileReader.readAsText(e.target.files[0], "UTF-8");
         fileReader.onload = async (event) => {
             try {
                 const textData = event.target.result;
-                const lines = textData.split('\n');
-                const parsedContacts = [];
+                let parsedRaw;
+                try {
+                    parsedRaw = JSON.parse(textData);
+                } catch (parseError) {
+                    triggerToast('Invalid file format — expected a JSON export from this app.');
+                    return;
+                }
 
-                lines.forEach((line) => {
-                    if (line.trim() !== '') {
-                        const parts = line.split('|');
-                        if (parts.length >= 4) {
-                            const namePart = parts[0].replace('Name:', '').trim().split(' ');
-                            const titlePart = parts[1].replace('Title:', '').trim();
-                            const emailsPart = parts[2].replace('Emails:', '').trim();
-                            const phonesPart = parts[3].replace('Phones:', '').trim();
+                if (!Array.isArray(parsedRaw)) {
+                    triggerToast('Invalid file format — expected a list of contacts.');
+                    return;
+                }
 
-                            parsedContacts.push({
-                                firstName: namePart[0] || 'Unknown',
-                                lastName: namePart.slice(1).join(' ') || '',
-                                title: titlePart,
-                                emails: inlineToMap(emailsPart === 'N/A' ? '' : emailsPart),
-                                phoneNumbers: inlineToMap(phonesPart === 'N/A' ? '' : phonesPart)
-                            });
-                        }
-                    }
-                });
+                const parsedContacts = parsedRaw
+                    .filter(item => item && typeof item === 'object')
+                    .map(item => ({
+                        firstName: item.firstName || 'Unknown',
+                        lastName: item.lastName || '',
+                        title: item.title || '',
+                        emails: item.emails && typeof item.emails === 'object' ? item.emails : {},
+                        phoneNumbers: item.phoneNumbers && typeof item.phoneNumbers === 'object' ? item.phoneNumbers : {}
+                    }));
 
                 if (parsedContacts.length > 0) {
                     // A contact is a "duplicate" if ANY of its emails matches ANY
@@ -132,10 +114,10 @@ export const importContactsFromFile = (e, currentContacts, setContacts, reloadCo
                         triggerToast('Failed to save imported contacts to database.');
                     }
                 } else {
-                    triggerToast('No valid contact lines found in file.');
+                    triggerToast('No valid contacts found in file.');
                 }
             } catch (error) {
-                triggerToast('Error reading uploaded text file.');
+                triggerToast('Error reading uploaded file.');
             }
         };
     }

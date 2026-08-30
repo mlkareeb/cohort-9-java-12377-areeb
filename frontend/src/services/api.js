@@ -2,8 +2,33 @@
 
 const BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8080/api';
 
+// Guards against sending the JWT bearer token in plaintext over a non-loopback
+// HTTP origin. Localhost/127.0.0.1 over http:// is fine for local dev; any other
+// http:// host (e.g. a misconfigured REACT_APP_API_BASE_URL pointing at a real
+// server without TLS) would leak the token to anyone on the network path.
+const isSecureOrLoopback = (() => {
+    try {
+        const { protocol, hostname } = new URL(BASE_URL);
+        if (protocol === 'https:') return true;
+        const isLoopback = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
+        return protocol === 'http:' && isLoopback;
+    } catch (e) {
+        // If BASE_URL isn't a valid absolute URL, fail closed rather than assume it's safe.
+        return false;
+    }
+})();
+
 const getHeaders = () => {
     const token = localStorage.getItem('token');
+    const isAuthed = Boolean(token);
+
+    if (isAuthed && !isSecureOrLoopback) {
+        throw new Error(
+            'Refusing to send credentials: API base URL is not HTTPS or localhost. ' +
+            'Check REACT_APP_API_BASE_URL.'
+        );
+    }
+
     return {
         'Content-Type': 'application/json',
         ...(token && { 'Authorization': `Bearer ${token}` })

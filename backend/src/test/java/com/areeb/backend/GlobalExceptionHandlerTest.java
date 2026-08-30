@@ -17,6 +17,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class GlobalExceptionHandlerTest {
 
@@ -84,8 +85,9 @@ class GlobalExceptionHandlerTest {
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
         assertNotNull(response.getBody());
 
-        @SuppressWarnings("unchecked")
-        Map<String, String> errors = (Map<String, String>) response.getBody().get("errors");
+        Object errorsValue = response.getBody().get("errors");
+        assertTrue(errorsValue instanceof Map<?, ?>);
+        Map<?, ?> errors = (Map<?, ?>) errorsValue;
         assertEquals("Password must be at least 6 characters", errors.get("password"));
     }
 
