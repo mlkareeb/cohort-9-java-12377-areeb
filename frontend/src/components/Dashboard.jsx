@@ -43,9 +43,20 @@ function Dashboard({ username, onLogout }) {
     // superseded request can detect it's stale and skip applying its response.
     const latestRequestId = useRef(0);
 
+    // Tracks the pending "hide toast" timeout so a new toast can cancel the
+    // previous one's timer instead of racing it — otherwise an earlier toast's
+    // timer could hide a later toast before its own 4 seconds have elapsed.
+    const toastTimerRef = useRef(null);
+
     const triggerToast = (msg) => {
+        if (toastTimerRef.current) {
+            clearTimeout(toastTimerRef.current);
+        }
         setToastMessage(msg);
-        setTimeout(() => setToastMessage(null), 4000);
+        toastTimerRef.current = setTimeout(() => {
+            setToastMessage(null);
+            toastTimerRef.current = null;
+        }, 4000);
     };
 
     const resetContactForm = () => {
@@ -139,6 +150,16 @@ function Dashboard({ username, onLogout }) {
             }
         };
         loadProfile();
+    }, []);
+
+    // Clear any pending toast timer on unmount to avoid a state update after
+    // the component is gone.
+    useEffect(() => {
+        return () => {
+            if (toastTimerRef.current) {
+                clearTimeout(toastTimerRef.current);
+            }
+        };
     }, []);
 
     const safeContacts = Array.isArray(contacts) ? contacts : [];

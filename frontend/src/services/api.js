@@ -1,4 +1,4 @@
-// src/services/api.js
+
 
 const BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8080/api';
 
@@ -28,12 +28,12 @@ const ensureSecureOrigin = () => {
 };
 
 const getHeaders = () => {
-    const token = localStorage.getItem('token');
-    const isAuthed = Boolean(token);
+    // Runs unconditionally — every request that goes through getHeaders() carries
+    // meaningful data (contacts, profile info, etc.), so the origin must be checked
+    // regardless of whether a bearer token happens to be present.
+    ensureSecureOrigin();
 
-    if (isAuthed) {
-        ensureSecureOrigin();
-    }
+    const token = localStorage.getItem('token');
 
     return {
         'Content-Type': 'application/json',

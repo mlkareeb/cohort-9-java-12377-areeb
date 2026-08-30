@@ -39,6 +39,10 @@ public class AuthService {
     public AuthResponse register(RegisterRequest request) {
         log.info("Executing user registration request");
 
+        if (request == null) {
+            throw new IllegalArgumentException("Registration request must not be null");
+        }
+
         if (!request.isEmailOrPhonePresent()) {
             throw new IllegalArgumentException("Either email or phone number is required");
         }
@@ -97,6 +101,10 @@ public class AuthService {
 
     public AuthResponse login(LoginRequest request) {
         log.info("Executing user authentication request");
+
+        if (request == null) {
+            throw new IllegalArgumentException("Login request must not be null");
+        }
 
         String identifier = normalizeIdentifier(request.getUsernameOrEmailOrPhone());
 
