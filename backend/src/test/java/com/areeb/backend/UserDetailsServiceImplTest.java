@@ -39,22 +39,22 @@ class UserDetailsServiceImplTest {
 
     @Test
     void testLoadUserByUsername_Success() {
-        when(userRepository.findByUsername("areeb")).thenReturn(Optional.of(testUser));
+        when(userRepository.findByUsernameOrEmailOrPhoneNumber("areeb")).thenReturn(Optional.of(testUser));
 
         UserDetails userDetails = userDetailsService.loadUserByUsername("areeb");
 
         assertNotNull(userDetails);
         assertEquals("areeb", userDetails.getUsername());
         assertEquals("encodedPassword", userDetails.getPassword());
-        verify(userRepository, times(1)).findByUsername("areeb");
+        verify(userRepository, times(1)).findByUsernameOrEmailOrPhoneNumber("areeb");
     }
 
     @Test
     void testLoadUserByUsername_UserNotFound() {
-        when(userRepository.findByUsername("unknown")).thenReturn(Optional.empty());
+        when(userRepository.findByUsernameOrEmailOrPhoneNumber("unknown")).thenReturn(Optional.empty());
 
         assertThrows(UsernameNotFoundException.class, () -> userDetailsService.loadUserByUsername("unknown"));
 
-        verify(userRepository, times(1)).findByUsername("unknown");
+        verify(userRepository, times(1)).findByUsernameOrEmailOrPhoneNumber("unknown");
     }
 }

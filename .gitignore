@@ -1,1 +1,14 @@
+# IDEs and Build Artifacts
 .idea/
+*.iml
+.mvn/
+target/
+frontend/node_modules/
+frontend/build/
+
+# Logs
+backend/logs/
+
+# OS Files
+.DS_Store
+Thumbs.db

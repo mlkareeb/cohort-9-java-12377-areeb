@@ -39,46 +39,96 @@ public class AuthService {
     public AuthResponse register(RegisterRequest request) {
         log.info("Executing user registration request");
 
-        if (userRepository.existsByUsername(request.getUsername())) {
-            throw new UserAlreadyExistsException("Username already exists");
+        if (request == null) {
+            throw new IllegalArgumentException("Registration request must not be null");
         }
-        if (userRepository.existsByEmail(request.getEmail())) {
-            throw new UserAlreadyExistsException("Email already exists");
+
+        if (!request.isEmailOrPhonePresent()) {
+            throw new IllegalArgumentException("Either email or phone number is required");
+        }
+
+        // Normalize blank strings to null so we never persist "" for an optional identifier
+        String normalizedEmail = (request.getEmail() != null && !request.getEmail().isBlank())
+                ? request.getEmail().trim() : null;
+        String normalizedPhone = (request.getPhoneNumber() != null && !request.getPhoneNumber().isBlank())
+                ? request.getPhoneNumber().trim() : null;
+
+        if (userRepository.existsAnywhere(request.getUsername())) {
+            throw new UserAlreadyExistsException("Username already exists in the system");
+        }
+        if (normalizedEmail != null && userRepository.existsAnywhere(normalizedEmail)) {
+            throw new UserAlreadyExistsException("Email already exists in the system");
+        }
+        if (normalizedPhone != null && userRepository.existsAnywhere(normalizedPhone)) {
+            throw new UserAlreadyExistsException("Phone number already exists in the system");
         }
 
         User user = new User();
         user.setUsername(request.getUsername());
-        user.setEmail(request.getEmail());
+        user.setEmail(normalizedEmail);
         user.setPassword(passwordEncoder.encode(request.getPassword()));
-        user.setPhoneNumber(request.getPhoneNumber());
+        user.setPhoneNumber(normalizedPhone);
 
         try {
             userRepository.save(user);
         } catch (DataIntegrityViolationException e) {
-            Throwable rootCause = e.getRootCause();
-            String message = (rootCause != null && rootCause.getMessage() != null) ? rootCause.getMessage().toLowerCase() : "";
-            if (message.contains("username") || message.contains("email") || message.contains("uk_")) {
-                throw new UserAlreadyExistsException("Username or Email already exists");
+            if (isDuplicateKeyViolation(e)) {
+                log.warn("Registration blocked by duplicate-key constraint for username: {}", request.getUsername());
+                throw new UserAlreadyExistsException("Username, email, or phone number already exists");
             }
-            throw e;
+            // Not a duplicate — wrap with context and rethrow so GlobalExceptionHandler's
+            // general handler logs and handles it, instead of double-logging here.
+            throw new DataIntegrityViolationException(
+                    "Registration failed for username '" + request.getUsername() + "' due to a non-duplicate data integrity violation", e);
         }
 
         String token = jwtUtil.generateToken(user.getUsername());
         return new AuthResponse(token, user.getUsername(), user.getEmail());
     }
 
+    // Distinguishes a real duplicate-key violation (username/email/phone unique constraint)
+    // from other integrity failures (null, length, etc.) using the root cause's SQL state /
+    // message, since Spring doesn't always translate SQL Server violations into the more
+    // specific DuplicateKeyException subtype.
+    private boolean isDuplicateKeyViolation(DataIntegrityViolationException e) {
+        Throwable rootCause = e.getRootCause();
+        if (rootCause == null || rootCause.getMessage() == null) {
+            return false;
+        }
+        String message = rootCause.getMessage().toLowerCase();
+        return message.contains("unique") || message.contains("duplicate") || message.contains("uk_");
+    }
+
     public AuthResponse login(LoginRequest request) {
         log.info("Executing user authentication request");
 
+        if (request == null) {
+            throw new IllegalArgumentException("Login request must not be null");
+        }
+
+        String identifier = normalizeIdentifier(request.getUsernameOrEmailOrPhone());
+
         authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(
-                        request.getUsername(), request.getPassword())
+                new UsernamePasswordAuthenticationToken(identifier, request.getPassword())
         );
 
-        User user = userRepository.findByUsername(request.getUsername())
+        User user = userRepository.findByUsernameOrEmailOrPhoneNumber(identifier)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
         String token = jwtUtil.generateToken(user.getUsername());
         return new AuthResponse(token, user.getUsername(), user.getEmail());
+    }
+
+    // Trims the identifier only when it looks like an email or phone number (matching how
+    // register() normalizes those two fields). Usernames are left untouched, since surrounding
+    // characters could theoretically be meaningful and registration never trims username either.
+    private String normalizeIdentifier(String identifier) {
+        if (identifier == null) {
+            return null;
+        }
+        String trimmed = identifier.trim();
+        boolean looksLikeEmail = trimmed.contains("@");
+        boolean looksLikePhone = trimmed.matches("^\\+?\\d{7,15}$");
+        return (looksLikeEmail || looksLikePhone) ? trimmed : identifier;
     }
 }

@@ -4,14 +4,20 @@ import com.areeb.backend.exception.GlobalExceptionHandler;
 import com.areeb.backend.exception.ResourceNotFoundException;
 import com.areeb.backend.exception.UserAlreadyExistsException;
 import org.junit.jupiter.api.Test;
+import org.springframework.core.MethodParameter;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.validation.BeanPropertyBindingResult;
+import org.springframework.validation.BindingResult;
+import org.springframework.validation.FieldError;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class GlobalExceptionHandlerTest {
 
@@ -59,5 +65,37 @@ class GlobalExceptionHandlerTest {
         assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.getStatusCode());
         assertNotNull(response.getBody());
         assertEquals("An unexpected internal server error occurred.", response.getBody().get("message"));
+    }
+
+    @Test
+    void testHandleValidationException() throws NoSuchMethodException {
+        BindingResult bindingResult = new BeanPropertyBindingResult(new Object(), "target");
+        bindingResult.addError(new FieldError(
+                "target", "password", "Password must be at least 6 characters"));
+
+        MethodParameter methodParameter = new MethodParameter(
+                GlobalExceptionHandlerTest.class.getDeclaredMethod("dummyMethod", String.class), 0);
+
+        MethodArgumentNotValidException ex =
+                new MethodArgumentNotValidException(methodParameter, bindingResult);
+
+        ResponseEntity<Map<String, Object>> response = exceptionHandler.handleValidationException(ex);
+
+        assertNotNull(response);
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        assertNotNull(response.getBody());
+
+        Object errorsValue = response.getBody().get("errors");
+        assertTrue(errorsValue instanceof Map<?, ?>);
+        Map<?, ?> errors = (Map<?, ?>) errorsValue;
+        assertEquals("Password must be at least 6 characters", errors.get("password"));
+    }
+
+    @SuppressWarnings("unused")
+    private void dummyMethod(String password) {
+        // This dummy method is intentionally empty and used purely for MethodParameter reflection in unit tests.
+        if (password == null) {
+            throw new IllegalArgumentException();
+        }
     }
 }

@@ -24,7 +24,7 @@ public class UserController {
         return ResponseEntity.ok(profile);
     }
 
-    @PostMapping("/change-password")
+    @PutMapping("/change-password")
     public ResponseEntity<String> changePassword(Authentication authentication, @Valid @RequestBody ChangePasswordRequest request) {
         userService.changePassword(authentication.getName(), request);
         return ResponseEntity.ok("Password changed successfully");

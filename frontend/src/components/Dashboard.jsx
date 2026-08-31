@@ -1,73 +1,187 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import UserProfile from './UserProfile';
+import ContactCard from './ContactCard';
+import { exportContactsToFile, importContactsFromFile } from './fileUtils';
+import {
+    fetchContactsApi,
+    searchContactsApi,
+    createContactApi,
+    updateContactApi,
+    deleteContactApi,
+    changePasswordApi,
+    getUserProfileApi
+} from '../services/api';
 
-function Dashboard({ onLogout }) {
+let entryIdCounter = 0;
+const nextEntryId = () => `entry-${entryIdCounter++}`;
+
+function Dashboard({ username, onLogout }) {
     const [activeTab, setActiveTab] = useState('contacts');
     const [viewMode, setViewMode] = useState('card');
-
-    const [contacts, setContacts] = useState([
-        { id: 1, firstName: 'Sarah', lastName: 'Jenkins', title: 'Senior Developer', emails: [{ type: 'Work', address: 'sarah@work.com' }], phones: [{ type: 'Mobile', number: '555-0192' }] },
-        { id: 2, firstName: 'Michael', lastName: 'Chang', title: 'Product Manager', emails: [{ type: 'Personal', address: 'mike@gmail.com' }], phones: [{ type: 'Work', number: '555-8371' }] },
-        { id: 3, firstName: 'Elena', lastName: 'Rostova', title: 'UX Architect', emails: [{ type: 'Home', address: 'elena@rostova.io' }], phones: [{ type: 'Home', number: '555-9021' }] }
-    ]);
-
+    const [contacts, setContacts] = useState([]);
+    const [totalPages, setTotalPages] = useState(1);
+    const [totalContacts, setTotalContacts] = useState(0);
     const [searchQuery, setSearchQuery] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
-    const contactsPerPage = 4;
-
+    const contactsPerPage = 6;
+    const [profile, setProfile] = useState(null);
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [showUpdateModal, setShowUpdateModal] = useState(false);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
     const [selectedContact, setSelectedContact] = useState(null);
-
     const [firstName, setFirstName] = useState('');
     const [lastName, setLastName] = useState('');
     const [title, setTitle] = useState('');
-    const [email, setEmail] = useState('');
-    const [phone, setPhone] = useState('');
-
+    const [emailEntries, setEmailEntries] = useState([{ id: nextEntryId(), label: 'Work', value: '' }]);
+    const [phoneEntries, setPhoneEntries] = useState([{ id: nextEntryId(), label: 'Mobile', value: '' }]);
     const [currentPassword, setCurrentPassword] = useState('');
     const [newPassword, setNewPassword] = useState('');
-
     const [toastMessage, setToastMessage] = useState(null);
 
+    // Tracks the most recently *started* loadContacts request so a slower,
+    // superseded request can detect it's stale and skip applying its response.
+    const latestRequestId = useRef(0);
+
+    // Tracks the pending "hide toast" timeout so a new toast can cancel the
+    // previous one's timer instead of racing it — otherwise an earlier toast's
+    // timer could hide a later toast before its own 4 seconds have elapsed.
+    const toastTimerRef = useRef(null);
+
     const triggerToast = (msg) => {
+        if (toastTimerRef.current) {
+            clearTimeout(toastTimerRef.current);
+        }
         setToastMessage(msg);
-        setTimeout(() => setToastMessage(null), 3000);
+        toastTimerRef.current = setTimeout(() => {
+            setToastMessage(null);
+            toastTimerRef.current = null;
+        }, 4000);
     };
 
-    const filteredContacts = contacts.filter(c =>
-        c.firstName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        c.lastName.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    const resetContactForm = () => {
+        setFirstName('');
+        setLastName('');
+        setTitle('');
+        setEmailEntries([{ id: nextEntryId(), label: 'Work', value: '' }]);
+        setPhoneEntries([{ id: nextEntryId(), label: 'Mobile', value: '' }]);
+    };
 
-    const totalPages = Math.ceil(filteredContacts.length / contactsPerPage) || 1;
+    const addEmailEntry = () => setEmailEntries(prev => [...prev, { id: nextEntryId(), label: '', value: '' }]);
+    const removeEmailEntry = (id) => setEmailEntries(prev => prev.filter(e => e.id !== id));
+    const updateEmailEntry = (id, field, val) =>
+        setEmailEntries(prev => prev.map(e => (e.id === id ? { ...e, [field]: val } : e)));
 
-    // Fix for CodeRabbit: Clamp currentPage when totalPages shrinks or search changes
-    useEffect(() => {
-        if (currentPage > totalPages) {
-            setCurrentPage(totalPages);
+    const addPhoneEntry = () => setPhoneEntries(prev => [...prev, { id: nextEntryId(), label: '', value: '' }]);
+    const removePhoneEntry = (id) => setPhoneEntries(prev => prev.filter(p => p.id !== id));
+    const updatePhoneEntry = (id, field, val) =>
+        setPhoneEntries(prev => prev.map(p => (p.id === id ? { ...p, [field]: val } : p)));
+
+    const entriesToMap = (entries) => {
+        const map = {};
+        entries.forEach(({ label, value }) => {
+            const trimmedLabel = (label || '').trim();
+            const trimmedValue = (value || '').trim();
+            if (trimmedLabel && trimmedValue) {
+                map[trimmedLabel] = trimmedValue;
+            }
+        });
+        return map;
+    };
+
+    const mapToEntries = (map, fallbackLabel) => {
+        if (map && typeof map === 'object' && !Array.isArray(map) && Object.keys(map).length > 0) {
+            return Object.entries(map).map(([label, value]) => ({ id: nextEntryId(), label, value }));
         }
-    }, [totalPages, currentPage]);
+        return [{ id: nextEntryId(), label: fallbackLabel, value: '' }];
+    };
 
-    const indexOfLastContact = currentPage * contactsPerPage;
-    const indexOfFirstContact = indexOfLastContact - contactsPerPage;
-    const currentContacts = filteredContacts.slice(indexOfFirstContact, indexOfLastContact);
+    // Loads one page of contacts from the backend, using the search endpoint when a query is present.
+    // Guards against stale responses and clamps currentPage if it exceeds totalPages.
+    const loadContacts = useCallback(async (page = currentPage, query = searchQuery) => {
+        const requestId = ++latestRequestId.current;
+        try {
+            const backendPage = page - 1; // backend pages are 0-indexed
+            const data = query && query.trim() !== ''
+                ? await searchContactsApi(query.trim(), backendPage, contactsPerPage)
+                : await fetchContactsApi(backendPage, contactsPerPage);
+            if (requestId !== latestRequestId.current) {
+                return; // a newer request superseded this one — discard this response
+            }
+            const newTotalPages = data?.totalPages || 1;
+            if (page > newTotalPages) {
+                setCurrentPage(newTotalPages);
+                return;
+            }
+            const list = Array.isArray(data?.content) ? data.content : [];
+            setContacts(list);
+            setTotalPages(newTotalPages);
+            setTotalContacts(data?.totalElements ?? list.length);
+        } catch (error) {
+            if (requestId !== latestRequestId.current) {
+                return;
+            }
+            triggerToast('Failed to load contacts from database.');
+            setContacts([]);
+            setTotalPages(1);
+            setTotalContacts(0);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [currentPage, searchQuery]);
 
-    const handleCreateContact = (e) => {
-        e.preventDefault();
-        const newEntry = {
-            id: Date.now(),
-            firstName,
-            lastName,
-            title,
-            emails: [{ type: 'Work', address: email }],
-            phones: [{ type: 'Mobile', number: phone }]
+    // Reset to page 1 whenever the search changes, so we don't get stuck on a page that no longer exists.
+    useEffect(() => {
+        setCurrentPage(1);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [searchQuery]);
+
+    useEffect(() => {
+        loadContacts(currentPage, searchQuery);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [currentPage, searchQuery]);
+
+    useEffect(() => {
+        const loadProfile = async () => {
+            try {
+                const data = await getUserProfileApi();
+                setProfile(data);
+            } catch (error) {
+                triggerToast('Failed to load profile information.');
+            }
         };
-        setContacts([...contacts, newEntry]);
-        setShowCreateModal(false);
-        setFirstName(''); setLastName(''); setTitle(''); setEmail(''); setPhone('');
-        triggerToast('Contact added successfully.');
+        loadProfile();
+    }, []);
+
+    // Clear any pending toast timer on unmount to avoid a state update after
+    // the component is gone.
+    useEffect(() => {
+        return () => {
+            if (toastTimerRef.current) {
+                clearTimeout(toastTimerRef.current);
+            }
+        };
+    }, []);
+
+    const safeContacts = Array.isArray(contacts) ? contacts : [];
+
+    const handleCreateContact = async (e) => {
+        e.preventDefault();
+        try {
+            const newEntry = {
+                firstName,
+                lastName,
+                title,
+                emails: entriesToMap(emailEntries),
+                phoneNumbers: entriesToMap(phoneEntries)
+            };
+            await createContactApi(newEntry);
+            await loadContacts();
+            setShowCreateModal(false);
+            resetContactForm();
+            triggerToast('Contact added successfully.');
+        } catch (error) {
+            triggerToast(`Error: ${error.message}`);
+        }
     };
 
     const openUpdateModal = (contact) => {
@@ -75,54 +189,110 @@ function Dashboard({ onLogout }) {
         setFirstName(contact.firstName);
         setLastName(contact.lastName);
         setTitle(contact.title);
-        setEmail(contact.emails[0]?.address || '');
-        setPhone(contact.phones[0]?.number || '');
+        setEmailEntries(mapToEntries(contact.emails, 'Work'));
+        setPhoneEntries(mapToEntries(contact.phoneNumbers, 'Mobile'));
         setShowUpdateModal(true);
     };
 
-    const handleUpdateContact = (e) => {
+    const handleUpdateContact = async (e) => {
         e.preventDefault();
-        setContacts(contacts.map(c => c.id === selectedContact.id ? {
-            ...c, firstName, lastName, title,
-            emails: [{ type: 'Work', address: email }],
-            phones: [{ type: 'Mobile', number: phone }]
-        } : c));
-        setShowUpdateModal(false);
-        triggerToast('Contact updated successfully.');
+        try {
+            const updatedData = {
+                firstName,
+                lastName,
+                title,
+                emails: entriesToMap(emailEntries),
+                phoneNumbers: entriesToMap(phoneEntries)
+            };
+            await updateContactApi(selectedContact.id, updatedData);
+            await loadContacts();
+            setShowUpdateModal(false);
+            resetContactForm();
+            triggerToast('Contact updated successfully.');
+        } catch (error) {
+            triggerToast(`Error: ${error.message}`);
+        }
     };
 
-    const handleDeleteConfirm = () => {
-        setContacts(contacts.filter(c => c.id !== selectedContact.id));
-        setShowDeleteModal(false);
-        setSelectedContact(null);
-        triggerToast('Contact removed.');
+    const handleDeleteConfirm = async () => {
+        try {
+            await deleteContactApi(selectedContact.id);
+            setShowDeleteModal(false);
+            setSelectedContact(null);
+            await loadContacts();
+            triggerToast('Contact removed.');
+        } catch (error) {
+            triggerToast('Error deleting contact.');
+        }
     };
 
-    const handlePasswordReset = (e) => {
+    const handlePasswordReset = async (e) => {
         e.preventDefault();
-        setShowChangePasswordModal(false);
-        setCurrentPassword('');
-        setNewPassword('');
-        triggerToast('Password updated successfully.');
+        try {
+            await changePasswordApi({ oldPassword: currentPassword, newPassword });
+            setShowChangePasswordModal(false);
+            setCurrentPassword('');
+            setNewPassword('');
+            triggerToast('Password updated successfully.');
+        } catch (error) {
+            triggerToast(`Error: ${error.message || 'Failed to update password.'}`);
+        }
+    };
+
+    // Helper to fetch all pages sequentially to avoid truncation past 1,000 records
+    const fetchAllContacts = async () => {
+        let allContacts = [];
+        let page = 0;
+        let totalPagesCount = 1;
+        do {
+            const data = await fetchContactsApi(page, 100);
+            const content = Array.isArray(data?.content) ? data.content : [];
+            allContacts = [...allContacts, ...content];
+            totalPagesCount = data?.totalPages || 1;
+            page++;
+        } while (page < totalPagesCount);
+        return allContacts;
+    };
+
+    const handleExportContacts = async () => {
+        try {
+            const fullList = await fetchAllContacts();
+            exportContactsToFile(fullList, triggerToast);
+        } catch (error) {
+            triggerToast('Failed to export contacts.');
+        }
+    };
+
+    const handleImportContacts = async (e) => {
+        try {
+            const fullList = await fetchAllContacts();
+            importContactsFromFile(e, fullList, setContacts, () => loadContacts(currentPage, searchQuery), triggerToast);
+        } catch (error) {
+            triggerToast('Failed to read existing contacts before import.');
+        }
+    };
+
+    const displayName = username || 'User';
+
+    const getPrimary = (map, preferredLabel) => {
+        if (!map || typeof map !== 'object') return '';
+        if (map[preferredLabel]) return map[preferredLabel];
+        const values = Object.values(map);
+        return values.length > 0 ? values[0] : '';
     };
 
     return (
         <div style={{ minHeight: '100vh', background: '#F8FAFC', color: '#1E293B', fontFamily: 'Inter, system-ui, sans-serif', display: 'flex', boxSizing: 'border-box' }}>
-
-            {/* Toast Notification */}
             {toastMessage && (
-                <div style={{ position: 'fixed', top: '24px', right: '24px', zIndex: 100, background: '#FFFFFF', border: '1px solid #E2E8F0', padding: '12px 20px', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', fontSize: '14px', fontWeight: '500', color: '#0F172A' }}>
-                    ✓ {toastMessage}
+                <div style={{ position: 'fixed', top: '24px', right: '24px', zIndex: 2000, background: '#FFFFFF', border: '1px solid #E2E8F0', padding: '12px 20px', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', fontSize: '14px', fontWeight: '500', color: '#0F172A', maxWidth: '400px', wordBreak: 'break-word' }}>
+                    {toastMessage}
                 </div>
             )}
-
-            {/* Sidebar matching light theme */}
             <div style={{ width: '260px', background: '#FFFFFF', borderRight: '1px solid #E2E8F0', padding: '28px 20px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', boxSizing: 'border-box' }}>
                 <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '32px', paddingLeft: '8px' }}>
                         <h2 style={{ margin: '0', fontSize: '20px', fontWeight: '700', color: '#2563EB', letterSpacing: '-0.5px' }}>ContactHub</h2>
                     </div>
-
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                         <button
                             onClick={() => setActiveTab('contacts')}
@@ -138,28 +308,21 @@ function Dashboard({ onLogout }) {
                         </button>
                     </div>
                 </div>
-
-                {/* User Profile Quick-Badge at Bottom */}
                 <div style={{ background: '#F8FAFC', padding: '12px 16px', borderRadius: '10px', border: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <div style={{ width: '32px', height: '32px', background: '#2563EB', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '700', fontSize: '13px', color: '#FFFFFF' }}>
-                            AK
+                            {displayName.substring(0, 2).toUpperCase()}
                         </div>
                         <div>
-                            <p style={{ margin: '0', fontSize: '13px', fontWeight: '600', color: '#0F172A' }}>Areeb Khan</p>
+                            <p style={{ margin: '0', fontSize: '13px', fontWeight: '600', color: '#0F172A' }}>{displayName}</p>
                             <p style={{ margin: '0', fontSize: '11px', color: '#64748B' }}>Online</p>
                         </div>
                     </div>
                     <button onClick={onLogout} title="Sign Out" style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#EF4444', fontSize: '13px', fontWeight: '600' }}>Logout</button>
                 </div>
             </div>
-
-            {/* Main Content Area */}
             <div style={{ flex: '1', display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
-
-                {/* Top Header Command Bar */}
                 <div style={{ height: '72px', background: '#FFFFFF', borderBottom: '1px solid #E2E8F0', padding: '0 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxSizing: 'border-box' }}>
-
                     <div style={{ position: 'relative', width: '340px' }}>
                         <input
                             type="text"
@@ -169,20 +332,16 @@ function Dashboard({ onLogout }) {
                             style={{ width: '100%', padding: '9px 14px', borderRadius: '8px', background: '#F8FAFC', border: '1px solid #CBD5E1', color: '#0F172A', outline: 'none', fontSize: '13px', boxSizing: 'border-box' }}
                         />
                     </div>
-
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                         <button
-                            onClick={() => setShowCreateModal(true)}
+                            onClick={() => { resetContactForm(); setShowCreateModal(true); }}
                             style={{ padding: '9px 18px', background: '#2563EB', color: '#FFFFFF', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}
                         >
                             + Add Contact
                         </button>
                     </div>
                 </div>
-
-                {/* Dynamic Workspace Area */}
                 <div style={{ flex: '1', padding: '32px', overflowY: 'auto', boxSizing: 'border-box' }}>
-
                     {activeTab === 'contacts' ? (
                         <div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
@@ -190,54 +349,51 @@ function Dashboard({ onLogout }) {
                                     <h1 style={{ margin: '0 0 4px 0', fontSize: '22px', fontWeight: '700', color: '#0F172A' }}>Contacts Directory</h1>
                                     <p style={{ margin: '0', color: '#64748B', fontSize: '13px' }}>Manage your professional and personal network.</p>
                                 </div>
-
-                                {/* View Mode Toggle Switch */}
-                                <div style={{ display: 'flex', background: '#E2E8F0', padding: '3px', borderRadius: '8px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                     <button
-                                        onClick={() => setViewMode('card')}
-                                        style={{ padding: '6px 14px', borderRadius: '6px', border: 'none', background: viewMode === 'card' ? '#FFFFFF' : 'transparent', color: viewMode === 'card' ? '#0F172A' : '#64748B', fontSize: '12px', fontWeight: '600', cursor: 'pointer', boxShadow: viewMode === 'card' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none' }}
+                                        onClick={handleExportContacts}
+                                        style={{ padding: '6px 12px', background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: '6px', color: '#0F172A', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}
                                     >
-                                        Cards
+                                        Download
                                     </button>
+                                    <input
+                                        type="file"
+                                        id="import-file-input"
+                                        accept=".json"
+                                        style={{ display: 'none' }}
+                                        onChange={handleImportContacts}
+                                    />
                                     <button
-                                        onClick={() => setViewMode('table')}
-                                        style={{ padding: '6px 14px', borderRadius: '6px', border: 'none', background: viewMode === 'table' ? '#FFFFFF' : 'transparent', color: viewMode === 'table' ? '#0F172A' : '#64748B', fontSize: '12px', fontWeight: '600', cursor: 'pointer', boxShadow: viewMode === 'table' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none' }}
+                                        onClick={() => document.getElementById('import-file-input').click()}
+                                        style={{ padding: '6px 12px', background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: '6px', color: '#0F172A', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}
                                     >
-                                        Table
+                                        Upload
                                     </button>
+                                    <div style={{ display: 'flex', background: '#E2E8F0', padding: '3px', borderRadius: '8px', marginLeft: '8px' }}>
+                                        <button
+                                            onClick={() => setViewMode('card')}
+                                            style={{ padding: '6px 14px', borderRadius: '6px', border: 'none', background: viewMode === 'card' ? '#FFFFFF' : 'transparent', color: viewMode === 'card' ? '#0F172A' : '#64748B', fontSize: '12px', fontWeight: '600', cursor: 'pointer', boxShadow: viewMode === 'card' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none' }}
+                                        >
+                                            Cards
+                                        </button>
+                                        <button
+                                            onClick={() => setViewMode('table')}
+                                            style={{ padding: '6px 14px', borderRadius: '6px', border: 'none', background: viewMode === 'table' ? '#FFFFFF' : 'transparent', color: viewMode === 'table' ? '#0F172A' : '#64748B', fontSize: '12px', fontWeight: '600', cursor: 'pointer', boxShadow: viewMode === 'table' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none' }}
+                                        >
+                                            Table
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
-
                             {viewMode === 'card' ? (
                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px', marginBottom: '28px' }}>
-                                    {currentContacts.map(contact => (
-                                        <div key={contact.id} style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '20px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
-                                            <div>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '14px' }}>
-                                                    <div style={{ width: '40px', height: '40px', background: '#DBEAFE', color: '#2563EB', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '700', fontSize: '15px' }}>
-                                                        {contact.firstName[0]}{contact.lastName[0]}
-                                                    </div>
-                                                    <div>
-                                                        <h3 style={{ margin: '0 0 2px 0', fontSize: '15px', fontWeight: '600', color: '#0F172A' }}>{contact.firstName} {contact.lastName}</h3>
-                                                        <span style={{ fontSize: '11px', background: '#F1F5F9', color: '#475569', padding: '2px 6px', borderRadius: '4px', fontWeight: '500' }}>{contact.title}</span>
-                                                    </div>
-                                                </div>
-
-                                                <div style={{ fontSize: '12px', color: '#64748B', marginBottom: '18px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                                    <div style={{ background: '#F8FAFC', padding: '8px 10px', borderRadius: '6px', border: '1px solid #E2E8F0' }}>
-                                                        <span>{contact.emails[0]?.address}</span>
-                                                    </div>
-                                                    <div style={{ background: '#F8FAFC', padding: '8px 10px', borderRadius: '6px', border: '1px solid #E2E8F0' }}>
-                                                        <span>{contact.phones[0]?.number}</span>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            <div style={{ display: 'flex', gap: '8px' }}>
-                                                <button onClick={() => openUpdateModal(contact)} style={{ flex: '1', padding: '7px', background: '#F8FAFC', color: '#0F172A', border: '1px solid #CBD5E1', borderRadius: '6px', fontWeight: '500', cursor: 'pointer', fontSize: '12px' }}>Edit</button>
-                                                <button onClick={() => { setSelectedContact(contact); setShowDeleteModal(true); }} style={{ flex: '1', padding: '7px', background: '#FEF2F2', color: '#DC2626', border: '1px solid #FCA5A5', borderRadius: '6px', fontWeight: '500', cursor: 'pointer', fontSize: '12px' }}>Delete</button>
-                                            </div>
-                                        </div>
+                                    {safeContacts.map(contact => (
+                                        <ContactCard
+                                            key={contact.id}
+                                            contact={contact}
+                                            onEdit={openUpdateModal}
+                                            onDelete={(c) => { setSelectedContact(c); setShowDeleteModal(true); }}
+                                        />
                                     ))}
                                 </div>
                             ) : (
@@ -253,28 +409,30 @@ function Dashboard({ onLogout }) {
                                         </tr>
                                         </thead>
                                         <tbody>
-                                        {currentContacts.map(c => (
-                                            <tr key={c.id} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                                                <td style={{ padding: '14px 20px', fontWeight: '600', color: '#0F172A' }}>{c.firstName} {c.lastName}</td>
-                                                <td style={{ padding: '14px 20px', color: '#64748B' }}>{c.title}</td>
-                                                <td style={{ padding: '14px 20px', color: '#64748B' }}>{c.emails[0]?.address}</td>
-                                                <td style={{ padding: '14px 20px', color: '#64748B' }}>{c.phones[0]?.number}</td>
-                                                <td style={{ padding: '14px 20px', textAlign: 'right' }}>
-                                                    <button onClick={() => openUpdateModal(c)} style={{ background: 'transparent', border: 'none', color: '#2563EB', cursor: 'pointer', marginRight: '12px', fontWeight: '600' }}>Edit</button>
-                                                    <button onClick={() => { setSelectedContact(c); setShowDeleteModal(true); }} style={{ background: 'transparent', border: 'none', color: '#DC2626', cursor: 'pointer', fontWeight: '600' }}>Delete</button>
-                                                </td>
-                                            </tr>
-                                        ))}
+                                        {safeContacts.map(c => {
+                                            const emailText = getPrimary(c.emails, 'Work');
+                                            const phoneText = getPrimary(c.phoneNumbers, 'Mobile');
+                                            return (
+                                                <tr key={c.id} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                                                    <td style={{ padding: '14px 20px', fontWeight: '600', color: '#0F172A' }}>{c.firstName} {c.lastName}</td>
+                                                    <td style={{ padding: '14px 20px', color: '#64748B' }}>{c.title}</td>
+                                                    <td style={{ padding: '14px 20px', color: '#64748B' }}>{emailText}</td>
+                                                    <td style={{ padding: '14px 20px', color: '#64748B' }}>{phoneText}</td>
+                                                    <td style={{ padding: '14px 20px', textAlign: 'right' }}>
+                                                        <button onClick={() => openUpdateModal(c)} style={{ background: 'transparent', border: 'none', color: '#2563EB', cursor: 'pointer', marginRight: '12px', fontWeight: '600' }}>Edit</button>
+                                                        <button onClick={() => { setSelectedContact(c); setShowDeleteModal(true); }} style={{ background: 'transparent', border: 'none', color: '#DC2626', cursor: 'pointer', fontWeight: '600' }}>Delete</button>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
                                         </tbody>
                                     </table>
                                 </div>
                             )}
-
-                            {/* Pagination Bar */}
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#FFFFFF', border: '1px solid #E2E8F0', padding: '12px 20px', borderRadius: '10px', boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
-                <span style={{ fontSize: '13px', color: '#64748B' }}>
-                  Page {currentPage} of {totalPages}
-                </span>
+                                <span style={{ fontSize: '13px', color: '#64748B' }}>
+                                    Page {currentPage} of {totalPages} &middot; {totalContacts} total contacts
+                                </span>
                                 <div style={{ display: 'flex', gap: '8px' }}>
                                     <button
                                         disabled={currentPage === 1}
@@ -292,117 +450,110 @@ function Dashboard({ onLogout }) {
                                     </button>
                                 </div>
                             </div>
-
                         </div>
                     ) : (
-                        /* User Profile Screen */
-                        <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: '24px', maxWidth: '900px' }}>
-
-                            <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '28px', textAlign: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
-                                <div style={{ width: '72px', height: '72px', background: '#DBEAFE', color: '#2563EB', borderRadius: '50%', margin: '0 auto 16px auto', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px', fontWeight: '700' }}>
-                                    AK
-                                </div>
-                                <h3 style={{ margin: '0 0 4px 0', fontSize: '18px', color: '#0F172A' }}>Areeb Khan</h3>
-                                <p style={{ margin: '0 0 20px 0', color: '#64748B', fontSize: '13px' }}>areeb.khan@example.com</p>
-
-                                <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '12px', display: 'flex', justifyContent: 'space-around' }}>
-                                    <div>
-                                        <div style={{ fontSize: '16px', fontWeight: '700', color: '#0F172A' }}>{contacts.length}</div>
-                                        <div style={{ fontSize: '11px', color: '#64748B' }}>Contacts</div>
-                                    </div>
-                                    <div style={{ width: '1px', background: '#E2E8F0' }}></div>
-                                    <div>
-                                        <div style={{ fontSize: '16px', fontWeight: '700', color: '#2563EB' }}>2026</div>
-                                        <div style={{ fontSize: '11px', color: '#64748B' }}>Joined</div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '28px', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
-                                <h2 style={{ margin: '0 0 20px 0', fontSize: '18px', color: '#0F172A' }}>Account Information</h2>
-
-                                <div style={{ marginBottom: '16px' }}>
-                                    <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', color: '#64748B', marginBottom: '6px' }}>Display Username</label>
-                                    <input type="text" defaultValue="areeb.khan" style={{ width: '100%', padding: '10px 12px', background: '#F8FAFC', border: '1px solid #CBD5E1', borderRadius: '8px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }} />
-                                </div>
-                                <div style={{ marginBottom: '20px' }}>
-                                    <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', color: '#64748B', marginBottom: '6px' }}>Primary Email Address</label>
-                                    <input type="email" defaultValue="areeb.khan@example.com" style={{ width: '100%', padding: '10px 12px', background: '#F8FAFC', border: '1px solid #CBD5E1', borderRadius: '8px', color: '#0F172A', outline: 'none', boxSizing: 'border-box' }} />
-                                </div>
-
-                                <button
-                                    onClick={() => setShowChangePasswordModal(true)}
-                                    style={{ padding: '10px 16px', background: '#F8FAFC', color: '#0F172A', border: '1px solid #CBD5E1', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '13px' }}
-                                >
-                                    Change Password
-                                </button>
-                            </div>
-
-                        </div>
+                        <UserProfile
+                            profile={profile}
+                            username={displayName}
+                            contactsCount={totalContacts}
+                            onOpenChangePassword={() => setShowChangePasswordModal(true)}
+                        />
                     )}
                 </div>
             </div>
-
-            {/* Create / Update Modal */}
             {(showCreateModal || showUpdateModal) && (
                 <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15, 23, 42, 0.4)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
-                    <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', padding: '32px', borderRadius: '12px', width: '100%', maxWidth: '400px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', boxSizing: 'border-box' }}>
+                    <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', padding: '32px', borderRadius: '12px', width: '100%', maxWidth: '440px', maxHeight: '85vh', overflowY: 'auto', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', boxSizing: 'border-box' }}>
                         <h3 style={{ margin: '0 0 20px 0', fontSize: '18px', color: '#0F172A', fontWeight: '700' }}>{showCreateModal ? 'Create Contact' : 'Edit Contact'}</h3>
                         <form onSubmit={showCreateModal ? handleCreateContact : handleUpdateContact}>
                             <div style={{ marginBottom: '12px' }}><label style={{ fontSize: '12px', fontWeight: '500', color: '#64748B' }}>First Name</label><input type="text" value={firstName} onChange={e => setFirstName(e.target.value)} required style={{ width: '100%', padding: '9px 12px', borderRadius: '6px', background: '#F8FAFC', border: '1px solid #CBD5E1', color: '#0F172A', boxSizing: 'border-box', marginTop: '4px' }} /></div>
                             <div style={{ marginBottom: '12px' }}><label style={{ fontSize: '12px', fontWeight: '500', color: '#64748B' }}>Last Name</label><input type="text" value={lastName} onChange={e => setLastName(e.target.value)} required style={{ width: '100%', padding: '9px 12px', borderRadius: '6px', background: '#F8FAFC', border: '1px solid #CBD5E1', color: '#0F172A', boxSizing: 'border-box', marginTop: '4px' }} /></div>
-                            <div style={{ marginBottom: '12px' }}><label style={{ fontSize: '12px', fontWeight: '500', color: '#64748B' }}>Title / Role</label><input type="text" value={title} onChange={e => setTitle(e.target.value)} required style={{ width: '100%', padding: '9px 12px', borderRadius: '6px', background: '#F8FAFC', border: '1px solid #CBD5E1', color: '#0F172A', boxSizing: 'border-box', marginTop: '4px' }} /></div>
-                            <div style={{ marginBottom: '12px' }}><label style={{ fontSize: '12px', fontWeight: '500', color: '#64748B' }}>Email</label><input type="email" value={email} onChange={e => setEmail(e.target.value)} required style={{ width: '100%', padding: '9px 12px', borderRadius: '6px', background: '#F8FAFC', border: '1px solid #CBD5E1', color: '#0F172A', boxSizing: 'border-box', marginTop: '4px' }} /></div>
-                            <div style={{ marginBottom: '24px' }}><label style={{ fontSize: '12px', fontWeight: '500', color: '#64748B' }}>Phone Number</label><input type="text" value={phone} onChange={e => setPhone(e.target.value)} required style={{ width: '100%', padding: '9px 12px', borderRadius: '6px', background: '#F8FAFC', border: '1px solid #CBD5E1', color: '#0F172A', boxSizing: 'border-box', marginTop: '4px' }} /></div>
-
+                            <div style={{ marginBottom: '16px' }}><label style={{ fontSize: '12px', fontWeight: '500', color: '#64748B' }}>Title / Role</label><input type="text" value={title} onChange={e => setTitle(e.target.value)} required style={{ width: '100%', padding: '9px 12px', borderRadius: '6px', background: '#F8FAFC', border: '1px solid #CBD5E1', color: '#0F172A', boxSizing: 'border-box', marginTop: '4px' }} /></div>
+                            <div style={{ marginBottom: '16px' }}>
+                                <label style={{ fontSize: '12px', fontWeight: '500', color: '#64748B' }}>Email Addresses</label>
+                                {emailEntries.map((entry) => (
+                                    <div key={entry.id} style={{ display: 'flex', gap: '6px', marginTop: '6px' }}>
+                                        <input
+                                            type="text"
+                                            placeholder="Label (Work, Personal...)"
+                                            value={entry.label}
+                                            onChange={e => updateEmailEntry(entry.id, 'label', e.target.value)}
+                                            style={{ width: '38%', padding: '9px 10px', borderRadius: '6px', background: '#F8FAFC', border: '1px solid #CBD5E1', color: '#0F172A', boxSizing: 'border-box' }}
+                                        />
+                                        <input
+                                            type="email"
+                                            placeholder="email@example.com"
+                                            value={entry.value}
+                                            onChange={e => updateEmailEntry(entry.id, 'value', e.target.value)}
+                                            style={{ flex: '1', padding: '9px 10px', borderRadius: '6px', background: '#F8FAFC', border: '1px solid #CBD5E1', color: '#0F172A', boxSizing: 'border-box' }}
+                                        />
+                                        {emailEntries.length > 1 && (
+                                            <button type="button" onClick={() => removeEmailEntry(entry.id)} style={{ background: 'transparent', border: 'none', color: '#DC2626', cursor: 'pointer', fontWeight: '700', padding: '0 6px' }}>×</button>
+                                        )}
+                                    </div>
+                                ))}
+                                <button type="button" onClick={addEmailEntry} style={{ marginTop: '8px', background: 'transparent', border: 'none', color: '#2563EB', fontSize: '12px', fontWeight: '600', cursor: 'pointer', padding: 0 }}>+ Add another email</button>
+                            </div>
+                            <div style={{ marginBottom: '24px' }}>
+                                <label style={{ fontSize: '12px', fontWeight: '500', color: '#64748B' }}>Phone Numbers</label>
+                                {phoneEntries.map((entry) => (
+                                    <div key={entry.id} style={{ display: 'flex', gap: '6px', marginTop: '6px' }}>
+                                        <input
+                                            type="text"
+                                            placeholder="Label (Mobile, Home...)"
+                                            value={entry.label}
+                                            onChange={e => updatePhoneEntry(entry.id, 'label', e.target.value)}
+                                            style={{ width: '38%', padding: '9px 10px', borderRadius: '6px', background: '#F8FAFC', border: '1px solid #CBD5E1', color: '#0F172A', boxSizing: 'border-box' }}
+                                        />
+                                        <input
+                                            type="text"
+                                            placeholder="Phone number"
+                                            value={entry.value}
+                                            onChange={e => updatePhoneEntry(entry.id, 'value', e.target.value)}
+                                            style={{ flex: '1', padding: '9px 10px', borderRadius: '6px', background: '#F8FAFC', border: '1px solid #CBD5E1', color: '#0F172A', boxSizing: 'border-box' }}
+                                        />
+                                        {phoneEntries.length > 1 && (
+                                            <button type="button" onClick={() => removePhoneEntry(entry.id)} style={{ background: 'transparent', border: 'none', color: '#DC2626', cursor: 'pointer', fontWeight: '700', padding: '0 6px' }}>×</button>
+                                        )}
+                                    </div>
+                                ))}
+                                <button type="button" onClick={addPhoneEntry} style={{ marginTop: '8px', background: 'transparent', border: 'none', color: '#2563EB', fontSize: '12px', fontWeight: '600', cursor: 'pointer', padding: 0 }}>+ Add another phone</button>
+                            </div>
                             <div style={{ display: 'flex', gap: '10px' }}>
-                                <button type="submit" style={{ flex: '1', padding: '10px', background: '#2563EB', color: '#FFFFFF', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer' }}>Save Contact</button>
-                                <button type="button" onClick={() => { setShowCreateModal(false); setShowUpdateModal(false); }} style={{ flex: '1', padding: '10px', background: '#F1F5F9', color: '#0F172A', border: '1px solid #CBD5E1', borderRadius: '8px', fontWeight: '600', cursor: 'pointer' }}>Cancel</button>
+                                <button type="submit" style={{ flex: '1', padding: '10px', background: '#2563EB', color: '#FFFFFF', border: 'none', borderRadius: '6px', fontWeight: '600', cursor: 'pointer' }}>Save Contact</button>
+                                <button type="button" onClick={() => { setShowCreateModal(false); setShowUpdateModal(false); resetContactForm(); }} style={{ padding: '10px 16px', background: '#F8FAFC', color: '#64748B', border: '1px solid #CBD5E1', borderRadius: '6px', fontWeight: '600', cursor: 'pointer' }}>Cancel</button>
                             </div>
                         </form>
                     </div>
                 </div>
             )}
-
-            {/* Change Password Modal */}
+            {showDeleteModal && (
+                <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15, 23, 42, 0.4)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
+                    <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', padding: '28px', borderRadius: '12px', width: '100%', maxWidth: '380px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', boxSizing: 'border-box', textAlign: 'center' }}>
+                        <h3 style={{ margin: '0 0 10px 0', fontSize: '18px', color: '#0F172A', fontWeight: '700' }}>Delete Contact</h3>
+                        <p style={{ margin: '0 0 20px 0', fontSize: '13px', color: '#64748B' }}>Are you sure you want to remove <strong style={{ color: '#0F172A' }}>{selectedContact?.firstName} {selectedContact?.lastName}</strong>? This action cannot be undone.</p>
+                        <div style={{ display: 'flex', gap: '10px' }}>
+                            <button onClick={handleDeleteConfirm} style={{ flex: '1', padding: '10px', background: '#DC2626', color: '#FFFFFF', border: 'none', borderRadius: '6px', fontWeight: '600', cursor: 'pointer' }}>Delete</button>
+                            <button onClick={() => { setShowDeleteModal(false); setSelectedContact(null); }} style={{ flex: '1', padding: '10px', background: '#F8FAFC', color: '#64748B', border: '1px solid #CBD5E1', borderRadius: '6px', fontWeight: '600', cursor: 'pointer' }}>Cancel</button>
+                        </div>
+                    </div>
+                </div>
+            )}
             {showChangePasswordModal && (
                 <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15, 23, 42, 0.4)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
                     <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', padding: '32px', borderRadius: '12px', width: '100%', maxWidth: '400px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', boxSizing: 'border-box' }}>
                         <h3 style={{ margin: '0 0 20px 0', fontSize: '18px', color: '#0F172A', fontWeight: '700' }}>Change Password</h3>
                         <form onSubmit={handlePasswordReset}>
-                            <div style={{ marginBottom: '12px' }}>
-                                <label style={{ fontSize: '12px', fontWeight: '500', color: '#64748B' }}>Current Password</label>
-                                <input type="password" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} required style={{ width: '100%', padding: '9px 12px', borderRadius: '6px', background: '#F8FAFC', border: '1px solid #CBD5E1', color: '#0F172A', boxSizing: 'border-box', marginTop: '4px' }} />
-                            </div>
-                            <div style={{ marginBottom: '24px' }}>
-                                <label style={{ fontSize: '12px', fontWeight: '500', color: '#64748B' }}>New Password</label>
-                                <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} required style={{ width: '100%', padding: '9px 12px', borderRadius: '6px', background: '#F8FAFC', border: '1px solid #CBD5E1', color: '#0F172A', boxSizing: 'border-box', marginTop: '4px' }} />
-                            </div>
-
+                            <div style={{ marginBottom: '12px' }}><label style={{ fontSize: '12px', fontWeight: '500', color: '#64748B' }}>Current Password</label><input type="password" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} required style={{ width: '100%', padding: '9px 12px', borderRadius: '6px', background: '#F8FAFC', border: '1px solid #CBD5E1', color: '#0F172A', boxSizing: 'border-box', marginTop: '4px' }} /></div>
+                            <div style={{ marginBottom: '24px' }}><label style={{ fontSize: '12px', fontWeight: '500', color: '#64748B' }}>New Password</label><input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} required style={{ width: '100%', padding: '9px 12px', borderRadius: '6px', background: '#F8FAFC', border: '1px solid #CBD5E1', color: '#0F172A', boxSizing: 'border-box', marginTop: '4px' }} /></div>
                             <div style={{ display: 'flex', gap: '10px' }}>
-                                <button type="submit" style={{ flex: '1', padding: '10px', background: '#2563EB', color: '#FFFFFF', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer' }}>Reset</button>
-                                <button type="button" onClick={() => { setShowChangePasswordModal(false); setCurrentPassword(''); setNewPassword(''); }} style={{ flex: '1', padding: '10px', background: '#F1F5F9', color: '#0F172A', border: '1px solid #CBD5E1', borderRadius: '8px', fontWeight: '600', cursor: 'pointer' }}>Cancel</button>
+                                <button type="submit" style={{ flex: '1', padding: '10px', background: '#2563EB', color: '#FFFFFF', border: 'none', borderRadius: '6px', fontWeight: '600', cursor: 'pointer' }}>Update Password</button>
+                                <button type="button" onClick={() => { setShowChangePasswordModal(false); setCurrentPassword(''); setNewPassword(''); }} style={{ padding: '10px 16px', background: '#F8FAFC', color: '#64748B', border: '1px solid #CBD5E1', borderRadius: '6px', fontWeight: '600', cursor: 'pointer' }}>Cancel</button>
                             </div>
                         </form>
                     </div>
                 </div>
             )}
-
-            {/* Delete Confirmation Modal */}
-            {showDeleteModal && (
-                <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15, 23, 42, 0.4)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
-                    <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', padding: '32px', borderRadius: '12px', width: '100%', maxWidth: '360px', textAlign: 'center', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', boxSizing: 'border-box' }}>
-                        <h3 style={{ margin: '0 0 8px 0', fontSize: '18px', color: '#0F172A', fontWeight: '700' }}>Confirm Deletion</h3>
-                        <p style={{ color: '#64748B', fontSize: '13px', marginBottom: '24px' }}>Are you sure you want to delete {selectedContact?.firstName}? This action cannot be undone.</p>
-
-                        <div style={{ display: 'flex', gap: '10px' }}>
-                            <button onClick={handleDeleteConfirm} style={{ flex: '1', padding: '10px', background: '#DC2626', color: '#FFFFFF', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer' }}>Delete</button>
-                            <button onClick={() => setShowDeleteModal(false)} style={{ flex: '1', padding: '10px', background: '#F1F5F9', color: '#0F172A', border: '1px solid #CBD5E1', borderRadius: '8px', fontWeight: '600', cursor: 'pointer' }}>Cancel</button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
         </div>
     );
 }

@@ -51,8 +51,11 @@ class AuthServiceTest {
         user.setUsername("areeb");
         user.setEmail("areeb@example.com");
 
-        when(userRepository.existsByUsername("areeb")).thenReturn(false);
-        when(userRepository.existsByEmail("areeb@example.com")).thenReturn(false);
+        // The exact match for your AuthService implementation
+        when(userRepository.existsAnywhere("areeb")).thenReturn(false);
+        when(userRepository.existsAnywhere("areeb@example.com")).thenReturn(false);
+        when(userRepository.existsAnywhere("1234567890")).thenReturn(false);
+
         when(passwordEncoder.encode("password123")).thenReturn("encodedPassword");
         when(userRepository.save(any(User.class))).thenReturn(user);
         when(jwtUtil.generateToken("areeb")).thenReturn("mocked-jwt-token");
@@ -65,16 +68,26 @@ class AuthServiceTest {
     }
 
     @Test
+    void testRegister_MissingEmailAndPhone_ThrowsException() {
+        RegisterRequest request = new RegisterRequest();
+        request.setUsername("areeb");
+        request.setPassword("password123");
+        // no email, no phone
+
+        assertThrows(IllegalArgumentException.class, () -> authService.register(request));
+    }
+
+    @Test
     void testLogin_Success() {
         LoginRequest request = new LoginRequest();
-        request.setUsername("areeb");
+        request.setUsernameOrEmailOrPhone("areeb");
         request.setPassword("password123");
 
         User user = new User();
         user.setUsername("areeb");
         user.setEmail("areeb@example.com");
 
-        when(userRepository.findByUsername("areeb")).thenReturn(Optional.of(user));
+        when(userRepository.findByUsernameOrEmailOrPhoneNumber("areeb")).thenReturn(Optional.of(user));
         when(jwtUtil.generateToken("areeb")).thenReturn("mocked-jwt-token");
 
         AuthResponse response = authService.login(request);

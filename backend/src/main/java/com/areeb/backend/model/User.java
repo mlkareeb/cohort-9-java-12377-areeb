@@ -13,12 +13,13 @@ public class User {
     @Column(unique = true, nullable = false)
     private String username;
 
-    @Column(unique = true, nullable = false)
+    @Column
     private String email;
 
     @Column(nullable = false)
     private String password;
 
+    @Column
     private String phoneNumber;
 
     public User() {}

@@ -5,6 +5,7 @@ import com.areeb.backend.model.User;
 import com.areeb.backend.repository.ContactRepository;
 import com.areeb.backend.repository.UserRepository;
 import com.areeb.backend.service.ContactExportImportServiceImpl;
+import jakarta.validation.Validator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentMatchers;
@@ -20,13 +21,15 @@ class ContactExportImportServiceImplTest {
 
     private ContactRepository contactRepository;
     private UserRepository userRepository;
+    private Validator validator;
     private ContactExportImportServiceImpl exportImportService;
 
     @BeforeEach
     void setUp() {
         contactRepository = mock(ContactRepository.class);
         userRepository = mock(UserRepository.class);
-        exportImportService = new ContactExportImportServiceImpl(contactRepository, userRepository);
+        validator = mock(Validator.class);
+        exportImportService = new ContactExportImportServiceImpl(contactRepository, userRepository, validator);
     }
 
     @Test
@@ -56,6 +59,7 @@ class ContactExportImportServiceImplTest {
         user.setId(userId);
 
         when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(validator.validate(ArgumentMatchers.any())).thenReturn(java.util.Collections.emptySet());
         when(contactRepository.save(ArgumentMatchers.any(Contact.class))).thenReturn(new Contact());
 
         // Updated JSON to match proper map/object structure for labeled fields

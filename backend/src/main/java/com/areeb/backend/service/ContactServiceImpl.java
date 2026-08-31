@@ -6,6 +6,8 @@ import com.areeb.backend.model.Contact;
 import com.areeb.backend.model.User;
 import com.areeb.backend.repository.ContactRepository;
 import com.areeb.backend.repository.UserRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -17,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 public class ContactServiceImpl implements ContactService {
 
+    private static final Logger log = LoggerFactory.getLogger(ContactServiceImpl.class);
     private static final String CONTACT_NOT_FOUND = "Contact not found with id: ";
 
     private final ContactRepository contactRepository;
@@ -30,22 +33,49 @@ public class ContactServiceImpl implements ContactService {
 
     @Override
     public ContactDto createContact(Long userId, ContactDto contactDto) {
+        log.info("Creating contact for userId: {}", userId);
+
+        if (contactDto == null) {
+            throw new IllegalArgumentException("Contact data cannot be null");
+        }
+        if (contactDto.getFirstName() == null || contactDto.getFirstName().isBlank()) {
+            throw new IllegalArgumentException("First name is required and cannot be blank");
+        }
+        if (contactDto.getLastName() == null || contactDto.getLastName().isBlank()) {
+            throw new IllegalArgumentException("Last name is required and cannot be blank");
+        }
+
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
 
         Contact contact = mapToEntity(contactDto);
+        contact.setId(null); // never trust a client-supplied id on create
         contact.setUser(user);
 
         Contact savedContact = contactRepository.save(contact);
+        log.info("Created contact with id: {} for userId: {}", savedContact.getId(), userId);
         return mapToDto(savedContact);
     }
 
     @Override
     public ContactDto updateContact(Long userId, Long contactId, ContactDto contactDto) {
+        log.info("Updating contact id: {} for userId: {}", contactId, userId);
+
+        if (contactDto == null) {
+            throw new IllegalArgumentException("Contact data cannot be null");
+        }
+        if (contactDto.getFirstName() == null || contactDto.getFirstName().isBlank()) {
+            throw new IllegalArgumentException("First name is required and cannot be blank");
+        }
+        if (contactDto.getLastName() == null || contactDto.getLastName().isBlank()) {
+            throw new IllegalArgumentException("Last name is required and cannot be blank");
+        }
+
         Contact contact = contactRepository.findById(contactId)
                 .orElseThrow(() -> new ResourceNotFoundException(CONTACT_NOT_FOUND + contactId));
 
         if (!contact.getUser().getId().equals(userId)) {
+            log.warn("Unauthorized attempt by userId: {} to update contact id: {}", userId, contactId);
             throw new AccessDeniedException("Unauthorized access to contact");
         }
 
@@ -56,19 +86,24 @@ public class ContactServiceImpl implements ContactService {
         contact.setPhoneNumbers(contactDto.getPhoneNumbers());
 
         Contact updatedContact = contactRepository.save(contact);
+        log.info("Updated contact id: {}", contactId);
         return mapToDto(updatedContact);
     }
 
     @Override
     public void deleteContact(Long userId, Long contactId) {
+        log.info("Deleting contact id: {} for userId: {}", contactId, userId);
+
         Contact contact = contactRepository.findById(contactId)
                 .orElseThrow(() -> new ResourceNotFoundException(CONTACT_NOT_FOUND + contactId));
 
         if (!contact.getUser().getId().equals(userId)) {
+            log.warn("Unauthorized attempt by userId: {} to delete contact id: {}", userId, contactId);
             throw new AccessDeniedException("Unauthorized access to contact");
         }
 
         contactRepository.delete(contact);
+        log.info("Deleted contact id: {}", contactId);
     }
 
     @Override
@@ -77,6 +112,7 @@ public class ContactServiceImpl implements ContactService {
                 .orElseThrow(() -> new ResourceNotFoundException(CONTACT_NOT_FOUND + contactId));
 
         if (!contact.getUser().getId().equals(userId)) {
+            log.warn("Unauthorized attempt by userId: {} to access contact id: {}", userId, contactId);
             throw new AccessDeniedException("Unauthorized access to contact");
         }
 

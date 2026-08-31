@@ -1,5 +1,7 @@
 package com.areeb.backend.dto;
 
+import jakarta.validation.constraints.NotBlank;
+
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -7,8 +9,13 @@ import java.util.Map;
 public class ContactDto {
 
     private Long id;
+
+    @NotBlank(message = "First name is required")
     private String firstName;
+
+    @NotBlank(message = "Last name is required")
     private String lastName;
+
     private String title;
     private Map<String, String> emails;
     private Map<String, String> phoneNumbers;
@@ -75,7 +82,7 @@ public class ContactDto {
 
     private Map<String, String> parseCollectionInput(Object input, String prefix) {
         if (input == null) {
-            throw new IllegalArgumentException("Input cannot be null");
+            return new HashMap<>();
         }
 
         return switch (input) {
