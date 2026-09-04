@@ -364,6 +364,8 @@ Static analysis runs automatically via GitHub Actions on every push to `main` or
 
 To run analysis locally, a `SONAR_TOKEN` must be available as an environment variable or GitHub Actions secret.
 
+> **Note on this repository's `SONAR_TOKEN`:** The SonarQube step in `.github/workflows/build.yml` requires a `SONAR_TOKEN` repository secret to authenticate with SonarCloud. This secret is configured on my personal fork (`https://github.com/mlkareeb/cohort-9-java-12377-areeb`), where the workflow runs successfully on `main` with both Java and JavaScript analyzed together — see the live, working dashboard: [SonarCloud project (main branch)](https://sonarcloud.io/project/overview?id=mlkareeb_cohort-9-java-12377-areeb&branch=main). The `SONAR_TOKEN` secret is **not currently configured on this org repository**, so the identical workflow will fail here with `Not authorized or project not found. Please check the 'SONAR_TOKEN' environment variable...` until the same secret value is added under this repo's **Settings → Secrets and variables → Actions → New repository secret** (name: `SONAR_TOKEN`). The workflow file, `sonar-project.properties`, and the underlying application code are unchanged between the two repositories — this is a missing-secret configuration gap on this specific repository, not a defect in the code or the CI configuration itself.
+
 ---
 
 ## Screenshots
@@ -407,6 +409,7 @@ Requires the current password before allowing a reset.
 - The frontend's Export/Import buttons use a client-side `.json` format (built in `fileUtils.js`) — they do not call the backend's `/contacts/export` and `/contacts/import` endpoints. Both mechanisms work independently; only the client-side JSON flow is wired into the UI.
 - A contact's labeled phone number values are not format-validated (unlike the phone number supplied at registration, which is) — any string is accepted.
 - The filtered unique indexes on `users.email` and `users.phoneNumber` are applied via a manual SQL script (see [Database setup](#database-setup)), not through Hibernate's `ddl-auto`, since JPA has no annotation for a partial/filtered index. A freshly cloned project needs that script run once after the first backend startup.
+- The GitHub Actions SonarQube workflow fails on the org repository (`10pshine-cohort-9/cohort-9-java-12377-areeb`) specifically due to a missing `SONAR_TOKEN` secret in that repository's settings. The identical workflow succeeds on my personal fork's `main` branch, confirming the workflow configuration and application code are correct — see the note in the [Code Quality — SonarQube](#code-quality--sonarqube) section above for details and the working dashboard link.
 
 ---
 
